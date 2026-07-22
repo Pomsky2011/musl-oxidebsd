@@ -48,7 +48,12 @@
 #define __NR_pread64			17
 #define __NR_pwrite64			18
 #define __NR_readv				19
-#define __NR_writev				20
+/* OxideBSD's own invention, added specifically because musl's entire stdio write path
+ * (src/stdio/__stdio_write.c) goes through writev, never plain write -- discovered the hard way:
+ * left unmapped (at Linux's original value, 20), this collided with OxideBSD's own
+ * SYS_GETPID=20, so printf() silently called getpid() instead of ever writing anything, no
+ * crash, just no output at all. See src/syscall.rs's sys_writev in the OxideBSD tree. */
+#define __NR_writev				104
 #define __NR_access				21
 #define __NR_pipe				22
 #define __NR_select				23
