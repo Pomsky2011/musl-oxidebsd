@@ -9,18 +9,26 @@
  * and returns ENOSYS (see src/syscall.rs::dispatch), which is the intended way to discover what
  * to remap/implement next, not a silent miscompile.
  *
- * SYS_open is deliberately NOT remapped, even though OxideBSD registers a SYS_OPEN=5: the
- * argument conventions don't match. Real open() (and this file's own __syscall3(SYS_open, ...))
- * passes a null-terminated C string pointer plus (flags, mode). OxideBSD's SYS_OPEN takes
- * (path_ptr, path_len, flags) -- a length-prefixed pointer, no null terminator requirement, and no
- * mode argument at all (see modules/fat32/src/lib.rs's fat32_open in the OxideBSD tree). Remapping
- * just the *number* here without also changing how the arguments are built would silently
- * misinterpret path_len as flags and flags as mode -- worse than leaving it unmapped. Fixing this
- * needs either a musl-side open() override or an OxideBSD-side argument-convention change, neither
- * done yet. */
+ * SYS_open is now remapped to OxideBSD's real SYS_OPEN=5 -- unlike every other remap in this file,
+ * the argument conventions genuinely don't match (real open() passes a null-terminated C string
+ * plus (flags, mode); OxideBSD's SYS_OPEN takes (path_ptr, path_len, flags), no null terminator
+ * requirement, no mode argument -- see modules/fat32/src/lib.rs's fat32_open in the OxideBSD
+ * tree), so remapping the number alone wasn't enough (would misinterpret path_len as flags, flags
+ * as mode). src/fcntl/open.c is patched separately to build the actual wire format OxideBSD
+ * expects, bypassing this file's normal __sys_open_cp/__syscall3(SYS_open, path, flags, mode)
+ * macros entirely -- this remap only matters for making the `SYS_open` macro exist so those
+ * (now-unused, for the real open() path) macros keep compiling; open.c never reads it.
+ *
+ * NOTE: __NR_fstat's own value (5, untouched, matching real Linux) now numerically collides with
+ * this. Confirmed harmless for every static binary run through this port so far (musl's own
+ * startup path, true/echo, and cat's plain read path -- see CLAUDE.md's BusyBox section -- never
+ * call fstat()), but a real landmine for any future one that does: it would silently reach
+ * fat32_open with a small integer fd value reinterpreted as a path_ptr instead of ENOSYS-ing. Not
+ * fixed here since nothing reaches it yet; remap __NR_fstat to something inert (or implement a
+ * real SYS_FSTAT) the moment something does. */
 #define __NR_read				3
 #define __NR_write				4
-#define __NR_open				2
+#define __NR_open				5
 #define __NR_close				6
 #define __NR_stat				4
 #define __NR_fstat				5
