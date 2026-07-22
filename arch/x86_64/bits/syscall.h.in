@@ -19,13 +19,13 @@
  * macros entirely -- this remap only matters for making the `SYS_open` macro exist so those
  * (now-unused, for the real open() path) macros keep compiling; open.c never reads it.
  *
- * NOTE: __NR_fstat's own value (5, untouched, matching real Linux) now numerically collides with
+ * NOTE: the fstat entry below (5, untouched, matching real Linux) now numerically collides with
  * this. Confirmed harmless for every static binary run through this port so far (musl's own
  * startup path, true/echo, and cat's plain read path -- see CLAUDE.md's BusyBox section -- never
  * call fstat()), but a real landmine for any future one that does: it would silently reach
  * fat32_open with a small integer fd value reinterpreted as a path_ptr instead of ENOSYS-ing. Not
- * fixed here since nothing reaches it yet; remap __NR_fstat to something inert (or implement a
- * real SYS_FSTAT) the moment something does. */
+ * fixed here since nothing reaches it yet; remap the fstat entry to something inert (or implement
+ * a real SYS_FSTAT) the moment something does. */
 #define __NR_read				3
 #define __NR_write				4
 #define __NR_open				5
