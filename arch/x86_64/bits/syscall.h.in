@@ -41,9 +41,11 @@
  * musl's six ever arrive: addr (RDI, a hint -- ignored, OxideBSD always picks the address),
  * len (RSI, the one argument that actually matters), and prot (RDX, ignored -- every mapped page
  * is unconditionally PRESENT|WRITABLE|USER_ACCESSIBLE, the same "every page WRITABLE regardless"
- * simplification src/module.rs's own loader already uses). flags/fd/off (R10/R8/R9) are entirely
- * unreadable at this ABI's current argument-register width and are never consulted -- every
- * mapping unconditionally behaves as anonymous+private, the only case this kernel needs to
+ * simplification src/module.rs's own loader already uses). fd/off (R8/R9) are entirely unreadable
+ * at this ABI's 4-argument width; flags (R10) is technically readable now (unlike when this
+ * comment was first written -- R10 became a real argument once SYS_execve needed one, see
+ * src/syscall.rs's module doc comment) but mmap's own registered handler still doesn't read it --
+ * every mapping unconditionally behaves as anonymous+private, the only case this kernel needs to
  * support for musl's allocator. See src/process.rs's mmap handler in the OxideBSD tree. */
 #define __NR_mmap				100
 #define __NR_mprotect			10
@@ -63,7 +65,11 @@
  * crash, just no output at all. See src/syscall.rs's sys_writev in the OxideBSD tree. */
 #define __NR_writev				104
 #define __NR_access				21
-#define __NR_pipe				22
+/* OxideBSD's own invention -- but matches real pipe(2)'s exact wire format (a single pointer to
+ * int pipefd[2]), so remapping the number alone was enough; no argument-convention patch needed
+ * the way open()/execve() did. See src/syscall.rs's sys_pipe / src/pipe.rs in the OxideBSD tree --
+ * added once sh (BusyBox's hush) needed real pipeline (`cmd1 | cmd2`) support. */
+#define __NR_pipe				105
 #define __NR_select				23
 #define __NR_sched_yield		24
 #define __NR_mremap				25
@@ -74,7 +80,9 @@
 #define __NR_shmat				30
 #define __NR_shmctl				31
 #define __NR_dup				32
-#define __NR_dup2				33
+/* OxideBSD's own invention -- matches real dup2(2)'s exact (oldfd, newfd) wire format, same story
+ * as the pipe entry above. See src/syscall.rs's sys_dup2 / src/fd.rs's dup2 in the OxideBSD tree. */
+#define __NR_dup2				106
 #define __NR_pause				34
 #define __NR_nanosleep			35
 #define __NR_getitimer			36
