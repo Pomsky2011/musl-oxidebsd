@@ -1,16 +1,46 @@
-#define __NR_read				0
-#define __NR_write				1
+/* OxideBSD patch: this file's numbers upstream are real Linux x86_64 syscall numbers. OxideBSD's
+ * own native ABI (src/syscall.rs in the OxideBSD tree) has an entirely different, invented-for-
+ * itself number space (matching real FreeBSD's long-stable values for the syscalls that were
+ * already implemented before this port, plus fresh OxideBSD-only numbers for what's new -- see
+ * that file's own module doc comment). Only the entries below that musl's startup/malloc/stdio
+ * path for a static binary can actually reach have been remapped to OxideBSD's real registered
+ * numbers; everything else keeps its original (inert, unreachable-until-remapped) Linux value --
+ * if the linked program ever calls one of those, the kernel logs "unrecognized syscall number"
+ * and returns ENOSYS (see src/syscall.rs::dispatch), which is the intended way to discover what
+ * to remap/implement next, not a silent miscompile.
+ *
+ * SYS_open is deliberately NOT remapped, even though OxideBSD registers a SYS_OPEN=5: the
+ * argument conventions don't match. Real open() (and this file's own __syscall3(SYS_open, ...))
+ * passes a null-terminated C string pointer plus (flags, mode). OxideBSD's SYS_OPEN takes
+ * (path_ptr, path_len, flags) -- a length-prefixed pointer, no null terminator requirement, and no
+ * mode argument at all (see modules/fat32/src/lib.rs's fat32_open in the OxideBSD tree). Remapping
+ * just the *number* here without also changing how the arguments are built would silently
+ * misinterpret path_len as flags and flags as mode -- worse than leaving it unmapped. Fixing this
+ * needs either a musl-side open() override or an OxideBSD-side argument-convention change, neither
+ * done yet. */
+#define __NR_read				3
+#define __NR_write				4
 #define __NR_open				2
-#define __NR_close				3
+#define __NR_close				6
 #define __NR_stat				4
 #define __NR_fstat				5
 #define __NR_lstat				6
 #define __NR_poll				7
 #define __NR_lseek				8
-#define __NR_mmap				9
+/* OxideBSD's own invented mmap. musl's mmap() wrapper always calls __syscall6(SYS_mmap, addr,
+ * len, prot, flags, fd, off) -- OxideBSD's ABI only wires 3 argument registers through to a
+ * handler (RDI/RSI/RDX; see src/syscall.rs's module doc comment), so only the first three of
+ * musl's six ever arrive: addr (RDI, a hint -- ignored, OxideBSD always picks the address),
+ * len (RSI, the one argument that actually matters), and prot (RDX, ignored -- every mapped page
+ * is unconditionally PRESENT|WRITABLE|USER_ACCESSIBLE, the same "every page WRITABLE regardless"
+ * simplification src/module.rs's own loader already uses). flags/fd/off (R10/R8/R9) are entirely
+ * unreadable at this ABI's current argument-register width and are never consulted -- every
+ * mapping unconditionally behaves as anonymous+private, the only case this kernel needs to
+ * support for musl's allocator. See src/process.rs's mmap handler in the OxideBSD tree. */
+#define __NR_mmap				100
 #define __NR_mprotect			10
-#define __NR_munmap				11
-#define __NR_brk				12
+#define __NR_munmap				101
+#define __NR_brk				102
 #define __NR_rt_sigaction		13
 #define __NR_rt_sigprocmask		14
 #define __NR_rt_sigreturn		15
@@ -37,7 +67,7 @@
 #define __NR_getitimer			36
 #define __NR_alarm				37
 #define __NR_setitimer			38
-#define __NR_getpid				39
+#define __NR_getpid				20
 #define __NR_sendfile			40
 #define __NR_socket				41
 #define __NR_connect			42
@@ -55,11 +85,26 @@
 #define __NR_setsockopt			54
 #define __NR_getsockopt			55
 #define __NR_clone				56
-#define __NR_fork				57
+/* _Fork() (src/process/_Fork.c) prefers plain SYS_fork (a no-arg fork, exactly OxideBSD's own
+ * SYS_FORK=2) over SYS_clone whenever SYS_fork is defined -- true here, so SYS_clone/SYS_vfork
+ * are never reached by musl's own fork() and are left unmapped (real `clone(2)`-with-flags
+ * semantics don't exist on OxideBSD at all yet). */
+#define __NR_fork				2
 #define __NR_vfork				58
+/* Numerically unchanged from upstream (59 happens to already be OxideBSD's real SYS_EXECVE), but
+ * NOT actually argument-compatible yet, same category of gap as SYS_open above: musl's execve()
+ * passes (path, argv, envp) in RDI/RSI/RDX; OxideBSD's SYS_EXECVE (src/process.rs::do_execve)
+ * expects (path_ptr, path_len) -- no argv/envp support at all yet. Unreachable for now since
+ * nothing in this port's own test programs calls execve() on itself (only stsh, over the native
+ * ABI it already speaks correctly, execve's *other* programs) -- flagged here so remapping the
+ * number doesn't read as "this was verified to work." */
 #define __NR_execve				59
-#define __NR_exit				60
-#define __NR_wait4				61
+/* exit()/_Exit() (src/exit/_Exit.c) call SYS_exit_group first, falling back to a SYS_exit loop
+ * only if that somehow returns (it never does, on a real kernel or on OxideBSD) -- both get
+ * OxideBSD's one real SYS_EXIT=1, since this kernel's process model has no separate "just this
+ * thread" vs "whole process" exit distinction to preserve (no threads exist at all yet). */
+#define __NR_exit				1
+#define __NR_wait4				7
 #define __NR_kill				62
 #define __NR_uname				63
 #define __NR_semget				64
@@ -229,7 +274,8 @@
 #define __NR_clock_gettime			228
 #define __NR_clock_getres			229
 #define __NR_clock_nanosleep		230
-#define __NR_exit_group				231
+/* See SYS_exit's own comment above -- exit()/_Exit() reach this one first. */
+#define __NR_exit_group				1
 #define __NR_epoll_wait				232
 #define __NR_epoll_ctl				233
 #define __NR_tgkill					234
