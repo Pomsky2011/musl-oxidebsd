@@ -154,14 +154,28 @@
  * `cd` builtin surfaced the gap). Matches chdir(2)'s own (path) wire format exactly. */
 #define __NR_chdir				12
 #define __NR_fchdir				81
-#define __NR_rename				82
+/* OxideBSD's own invention (111, not a Linux/FreeBSD-authentic number -- unlike SYS_chdir/SYS_mkdir
+ * above, this one never existed as a mapped, reachable syscall before this: no filesystem module
+ * implemented rename() until modules/oxfs replaced modules/fat32). Wire format is (old_ptr,
+ * old_len, new_ptr, new_len) -- all four of this ABI's argument registers, the same "R10 becomes a
+ * real argument" precedent execve's envp_ptr set. src/stdio/rename.c is patched separately to
+ * build that shape (real rename() passes two plain null-terminated strings, no lengths). See
+ * modules/oxfs/src/lib.rs's sys_rename in the OxideBSD tree. */
+#define __NR_rename				111
 /* Remapped to OxideBSD's real SYS_MKDIR=136 (modules/fat32/src/lib.rs's sys_mkdir in the OxideBSD
  * tree), for the same reason and at the same time as the SYS_chdir remap above. */
 #define __NR_mkdir				136
-#define __NR_rmdir				84
+/* OxideBSD's own invention (110) -- same story as SYS_rename above: never mapped/reachable before
+ * modules/oxfs. Wire format is (path_ptr, path_len), same convention as SYS_chdir/SYS_mkdir --
+ * src/unistd/rmdir.c is patched to compute path_len via strlen(). */
+#define __NR_rmdir				110
 #define __NR_creat				85
 #define __NR_link				86
-#define __NR_unlink				87
+/* OxideBSD's own invention (109) -- same story as SYS_rmdir above. src/unistd/unlink.c is patched
+ * to compute path_len via strlen(). The removed directory entry's inode/blocks are not freed
+ * (modules/oxfs, like every other allocator in this codebase, never reclaims) -- see
+ * modules/oxfs/src/lib.rs's sys_unlink in the OxideBSD tree. */
+#define __NR_unlink				109
 #define __NR_symlink			88
 #define __NR_readlink			89
 #define __NR_chmod				90
