@@ -143,11 +143,21 @@
 #define __NR_truncate			76
 #define __NR_ftruncate			77
 #define __NR_getdents			78
-#define __NR_getcwd				79
-#define __NR_chdir				80
+/* OxideBSD's own invention (108, not a FreeBSD-authentic number -- added once porting sh (BusyBox's
+ * hush) surfaced it as unrecognized: hush's cd/prompt logic calls real getcwd()). Matches real
+ * getcwd(2)'s own wire format exactly (buf, size) -> byte count including NUL, or -ERANGE if size
+ * is too small, so no argument-convention patch was needed on the musl side, same story as
+ * pipe/dup2 below. See modules/fat32/src/lib.rs's sys_getcwd in the OxideBSD tree. */
+#define __NR_getcwd				108
+/* Remapped to OxideBSD's real SYS_CHDIR=12 (modules/fat32/src/lib.rs's sys_chdir in the OxideBSD
+ * tree, already implemented well before this port -- just never remapped here until hush's own
+ * `cd` builtin surfaced the gap). Matches chdir(2)'s own (path) wire format exactly. */
+#define __NR_chdir				12
 #define __NR_fchdir				81
 #define __NR_rename				82
-#define __NR_mkdir				83
+/* Remapped to OxideBSD's real SYS_MKDIR=136 (modules/fat32/src/lib.rs's sys_mkdir in the OxideBSD
+ * tree), for the same reason and at the same time as the SYS_chdir remap above. */
+#define __NR_mkdir				136
 #define __NR_rmdir				84
 #define __NR_creat				85
 #define __NR_link				86
@@ -174,7 +184,10 @@
 #define __NR_geteuid			107
 #define __NR_getegid			108
 #define __NR_setpgid			109
-#define __NR_getppid			110
+/* OxideBSD's own invention (107, not a FreeBSD-authentic number), added for the same reason and at
+ * the same time as the getcwd remap above -- hush reads $PPID at startup via getppid(). See
+ * src/process.rs's do_getppid / modules/native_abi/src/lib.rs in the OxideBSD tree. */
+#define __NR_getppid			107
 #define __NR_getpgrp			111
 #define __NR_setsid				112
 #define __NR_setreuid			113
