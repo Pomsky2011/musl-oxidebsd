@@ -9,11 +9,12 @@
  * (16 bytes each, matching src/process.rs's RawArgvEntry exactly), terminated by a {0, 0} entry --
  * see CLAUDE.md's BusyBox section for the full story of why this call needed patching at all.
  *
- * argv[0] is always supplied by the kernel from path_ptr/path_len itself -- there's no way to give
- * a process a different argv[0] than its own exec path under this ABI (a known, separate
- * limitation, not fixed here). argv_ptr only ever describes argv[1..], so real argv[0] is simply
- * dropped below, matching that existing convention exactly (see RawArgvEntry's own doc comment in
- * the OxideBSD tree).
+ * argv_ptr now carries the *complete* argv[] array, starting at argv[0] -- real argv[0] (which a
+ * caller can set to anything, not necessarily equal to path) is no longer dropped. This matches
+ * do_execve's own current wire-format contract in the OxideBSD tree (see RawArgvEntry's own doc
+ * comment there): a non-empty argv_ptr supplies argv[0] onward directly; passing no argv at all
+ * (argv == NULL or argv[0] == NULL) still falls back to argv_ptr == 0, which the kernel expands
+ * into a synthesized single-element argv = [path].
  */
 
 struct raw_argv_entry {
@@ -31,9 +32,9 @@ int execve(const char *path, char *const argv[], char *const envp[])
 	struct raw_argv_entry envp_entries[MAX_EXECVE_ENTRIES + 1];
 	int i;
 
-	for (i = 0; argv && argv[i + 1] && i < MAX_EXECVE_ENTRIES; i++) {
-		argv_entries[i].ptr = (unsigned long)argv[i + 1];
-		argv_entries[i].len = strlen(argv[i + 1]);
+	for (i = 0; argv && argv[i] && i < MAX_EXECVE_ENTRIES; i++) {
+		argv_entries[i].ptr = (unsigned long)argv[i];
+		argv_entries[i].len = strlen(argv[i]);
 	}
 	argv_entries[i].ptr = 0;
 	argv_entries[i].len = 0;
