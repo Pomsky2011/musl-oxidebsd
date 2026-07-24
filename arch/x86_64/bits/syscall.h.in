@@ -51,10 +51,38 @@
 #define __NR_mprotect			10
 #define __NR_munmap				101
 #define __NR_brk				102
-#define __NR_rt_sigaction		13
-#define __NR_rt_sigprocmask		14
-#define __NR_rt_sigreturn		15
-#define __NR_ioctl				16
+/* OxideBSD's own invention (117), but matches real rt_sigaction(2)'s exact wire format --
+ * (sig, const struct k_sigaction *act, struct k_sigaction *oldact, size_t sigsetsize), the same
+ * 4-argument shape __libc_sigaction (src/signal/sigaction.c) already builds unconditionally, so
+ * remapping the number alone was enough; no argument-convention patch needed the way
+ * open()/execve() did. Only signals 1-31 are recognized on the OxideBSD side (no real-time
+ * signals) -- see src/process.rs's do_sigaction in the OxideBSD tree. */
+#define __NR_rt_sigaction		117
+/* OxideBSD's own invention (118) -- matches real rt_sigprocmask(2)'s exact
+ * (how, set, oldset, sigsetsize) wire format, same story as rt_sigaction above. See
+ * src/syscall.rs's sys_sigprocmask in the OxideBSD tree. */
+#define __NR_rt_sigprocmask		118
+/* OxideBSD's own invention (119). Not actually reached through this header at all --
+ * src/signal/x86_64/restore.s hardcodes its own syscall number literal directly (real Linux's
+ * restorer stubs all do this, across every arch; none read this macro at all), so that file is
+ * patched separately (mov $119, %rax) to match. Kept in sync here anyway so any *future* C code
+ * that does reference the rt_sigreturn number sees the right value. See src/syscall.rs's
+ * do_sigreturn in the OxideBSD tree -- it bypasses this ABI's normal dispatch-table lookup entirely, since a
+ * sigreturn must restore the interrupted context's own saved carry flag verbatim, which the
+ * normal Ok(value)/Err(errno) convention can only ever force to one fixed polarity. */
+#define __NR_rt_sigreturn		119
+/* OxideBSD's own invention (124), continuing the sequence right past getpgid (121, with 122/123
+ * reserved for a future clock/nanosleep pass -- see CLAUDE.md's BusyBox gap analysis). Only a
+ * handful of tty-specific requests are actually implemented (TCGETS, the TCSETS family,
+ * TIOCGWINSZ, TIOCSWINSZ) -- everything else comes back ENOTTY, same as a real driver would for an
+ * unrecognized tty ioctl. Request codes themselves (e.g. TCGETS, still 0x5401 below) are real
+ * Linux/generic values, unchanged -- only the syscall number itself needed remapping, not the
+ * argument shape, since (fd, request, argp) already matches this ABI's own convention. Left at its
+ * original value (16) this was simply inert -- nothing else in this invented-number sequence
+ * (1-59, then 100 onward) ever used 16, so no collision existed either way; remapped anyway for
+ * the same reason every other syscall this port actually implements gets a real number instead of
+ * silently ENOSYS-ing forever. See src/syscall.rs's sys_ioctl in the OxideBSD tree. */
+#define __NR_ioctl				124
 #define __NR_pread64			17
 #define __NR_pwrite64			18
 #define __NR_readv				19
@@ -79,7 +107,13 @@
 #define __NR_shmget				29
 #define __NR_shmat				30
 #define __NR_shmctl				31
-#define __NR_dup				32
+/* OxideBSD's own invention (125), continuing the sequence right past ioctl (124). Matches real
+ * dup(2)'s exact single-argument (oldfd) wire format, same story as dup2 below. Added once
+ * CONFIG_HUSH_JOB turned out to need it (hush's own dup_CLOEXEC helper falls back to plain dup()
+ * once fcntl(F_DUPFD_CLOEXEC) -- itself unimplemented, harmlessly ENOSYS -- fails). Left at its
+ * original value (32) this was simply inert, same story ioctl's own original value (16) had. See
+ * src/fd.rs's dup in the OxideBSD tree. */
+#define __NR_dup				125
 /* OxideBSD's own invention -- matches real dup2(2)'s exact (oldfd, newfd) wire format, same story
  * as the pipe entry above. See src/syscall.rs's sys_dup2 / src/fd.rs's dup2 in the OxideBSD tree. */
 #define __NR_dup2				106
@@ -126,7 +160,11 @@
  * thread" vs "whole process" exit distinction to preserve (no threads exist at all yet). */
 #define __NR_exit				1
 #define __NR_wait4				7
-#define __NR_kill				62
+/* OxideBSD's own invention (116), but matches real kill(2)'s exact (pid, sig) wire format, same
+ * "no argument-convention patch needed" story as rt_sigaction/rt_sigprocmask above. Only a
+ * positive pid (no process-group/broadcast targeting) and signals 1-31 are supported on the
+ * OxideBSD side -- see src/process.rs's do_kill in the OxideBSD tree. */
+#define __NR_kill				116
 #define __NR_uname				63
 #define __NR_semget				64
 #define __NR_semop				65
@@ -197,7 +235,18 @@
 #define __NR_setgid				106
 #define __NR_geteuid			107
 #define __NR_getegid			108
-#define __NR_setpgid			109
+/* OxideBSD's own invention (120), continuing the sequence right past rt_sigreturn (119) -- but
+ * matches real setpgid(2)'s exact (pid, pgid) wire format, same "no argument-convention patch
+ * needed" story kill/rt_sigaction/rt_sigprocmask above already have. Left at its original value
+ * (109) this would silently collide with OxideBSD's own real unlink -- harmless only because
+ * nothing called setpgid before this. No permission/session checks on the OxideBSD side (no uid
+ * model at all yet) -- see src/process.rs's do_setpgid in the OxideBSD tree. A real, if narrow,
+ * numeric collision this remap itself introduces: getresgid's own untouched-from-Linux value is
+ * also 120 -- no caller in this port reaches getresgid, so this hasn't bitten anything, but it
+ * would silently land on setpgid's own handler instead of cleanly failing if one ever did (same
+ * "flagged, not fixed, since nothing reaches it yet" story open's own remap left for fstat --
+ * see CLAUDE.md's BusyBox port section). */
+#define __NR_setpgid			120
 /* OxideBSD's own invention (107, not a FreeBSD-authentic number), added for the same reason and at
  * the same time as the getcwd remap above -- hush reads $PPID at startup via getppid(). See
  * src/process.rs's do_getppid / modules/native_abi/src/lib.rs in the OxideBSD tree. */
@@ -212,6 +261,10 @@
 #define __NR_getresuid			118
 #define __NR_setresgid			119
 #define __NR_getresgid			120
+/* Needs no remap at all -- Linux's own original value for getpgid already happens to be exactly
+ * the number OxideBSD's own invented sequence would have assigned it next (121, right past
+ * setpgid's own 120 above). Matches real getpgid(2)'s exact (pid) wire format regardless -- see
+ * src/process.rs's do_getpgid in the OxideBSD tree. */
 #define __NR_getpgid			121
 #define __NR_setfsuid			122
 #define __NR_setfsgid			123

@@ -374,10 +374,26 @@ static inline long __alt_socketcall(int sys, int sock, int cp, syscall_arg_t a, 
 #endif
 
 #ifdef SYS_open
-#define __sys_open2(x,pn,fl) __syscall2(SYS_open, pn, (fl)|O_LARGEFILE)
-#define __sys_open3(x,pn,fl,mo) __syscall3(SYS_open, pn, (fl)|O_LARGEFILE, mo)
-#define __sys_open_cp2(x,pn,fl) __syscall_cp2(SYS_open, pn, (fl)|O_LARGEFILE)
-#define __sys_open_cp3(x,pn,fl,mo) __syscall_cp3(SYS_open, pn, (fl)|O_LARGEFILE, mo)
+/* OxideBSD patch: these generic 2-/3-arg open helpers -- used directly by fopen()/tmpfile()/
+ * __fopen_rb_ca() (internal stdio callers that bypass the public open() in src/fcntl/open.c
+ * entirely, calling sys_open()/__sys_open() straight from src/internal/syscall.h instead) -- still
+ * assumed real open(2)'s (path, flags[, mode]) wire format. A real, previously-latent bug, found
+ * only by running real interactive hush (its FEATURE_EDITING/HUSH_JOB startup path doesn't call
+ * fopen() itself, but happened to be the first thing in this port to exercise *some* internal
+ * caller that does): fopen()'s own sys_open(filename, flags, 0666) call reached OxideBSD's
+ * SYS_OPEN (modules/oxfs's oxfs_open in the OxideBSD tree) with real `flags` reinterpreted as a
+ * path *length* (a huge, garbage value) and real `mode` (0666) reinterpreted as `flags` --
+ * oxfs_open then built a slice covering hundreds of KB starting at the real filename pointer and
+ * walked off the end of its own mapped region. Fixed the same way src/fcntl/open.c's own patch
+ * already was: compute path_len via a real strlen (the caller always gives a NUL-terminated C
+ * string here too) and drop mode/O_LARGEFILE-oring, matching OxideBSD's own (path_ptr, path_len,
+ * flags) shape instead. `__builtin_strlen` (a compiler builtin, not a declared libc function) is
+ * used specifically so this macro doesn't depend on every expansion site already having
+ * <string.h> included. */
+#define __sys_open2(x,pn,fl) __syscall3(SYS_open, pn, __builtin_strlen(pn), (fl))
+#define __sys_open3(x,pn,fl,mo) __syscall3(SYS_open, pn, __builtin_strlen(pn), (fl))
+#define __sys_open_cp2(x,pn,fl) __syscall_cp3(SYS_open, pn, __builtin_strlen(pn), (fl))
+#define __sys_open_cp3(x,pn,fl,mo) __syscall_cp3(SYS_open, pn, __builtin_strlen(pn), (fl))
 #else
 #define __sys_open2(x,pn,fl) __syscall3(SYS_openat, AT_FDCWD, pn, (fl)|O_LARGEFILE)
 #define __sys_open3(x,pn,fl,mo) __syscall4(SYS_openat, AT_FDCWD, pn, (fl)|O_LARGEFILE, mo)
