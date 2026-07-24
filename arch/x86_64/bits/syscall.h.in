@@ -19,20 +19,36 @@
  * macros entirely -- this remap only matters for making the `SYS_open` macro exist so those
  * (now-unused, for the real open() path) macros keep compiling; open.c never reads it.
  *
- * NOTE: the fstat entry below (5, untouched, matching real Linux) now numerically collides with
- * this. Confirmed harmless for every static binary run through this port so far (musl's own
- * startup path, true/echo, and cat's plain read path -- see CLAUDE.md's BusyBox section -- never
- * call fstat()), but a real landmine for any future one that does: it would silently reach
- * fat32_open with a small integer fd value reinterpreted as a path_ptr instead of ENOSYS-ing. Not
- * fixed here since nothing reaches it yet; remap the fstat entry to something inert (or implement
- * a real SYS_FSTAT) the moment something does. */
+ * The stat/fstat/lstat macros below used to keep their original real-Linux values (4/5/6), which
+ * numerically collided with the write/open (remapped above)/close macros -- confirmed harmless at
+ * the time (nothing ported yet called stat/fstat/lstat), but a real landmine for anything that
+ * did. Now remapped to OxideBSD's own real, distinct, registered numbers (SYS_STAT = 127,
+ * SYS_FSTAT = 126, SYS_LSTAT = 128 in the OxideBSD tree's src/syscall.rs -- see
+ * `modules/oxfs/src/lib.rs`'s `oxfs_stat`/`oxfs_fstat`/`oxfs_lstat`) -- closing that collision,
+ * not just documenting it. `src/stat/{stat,fstat,lstat}.c` are patched separately (same "bypass
+ * the generic multiplexer" pattern `open.c`/`chdir.c`/`mkdir.c` already established) to build
+ * OxideBSD's own `(path_ptr, path_len, buf_ptr)` / `(fd, buf_ptr)` wire formats and write straight
+ * into a byte-exact `struct stat`, rather than going through musl's usual `fstatat`/kstat-then-copy
+ * indirection -- see `write_stat`'s own doc comment in `modules/oxfs/src/lib.rs` for why no
+ * intermediate kstat translation is needed here at all.
+ *
+ * NOTE FOR FUTURE EDITS: this file's generated public header (obj/include/bits/syscall.h, built by
+ * this project's Makefile) is produced by copying this file verbatim, then appending one line per
+ * line that contains this file's own internal macro-name prefix (two leading underscores, N, R,
+ * trailing underscore -- see the #define lines immediately below for what that looks like), with
+ * its first occurrence rewritten to the public prefix. That match is a blind per-line substring
+ * search, not comment-aware: a comment line containing the internal prefix gets dumped a second
+ * time, bare, outside any comment block -- a real, not hypothetical, "stray backtick"/syntax-error
+ * footgun (hit exactly this while first writing the comment above). Never spell that internal
+ * prefix out in prose anywhere in this file; refer to macros by their public name instead (as done
+ * throughout this file already). */
 #define __NR_read				3
 #define __NR_write				4
 #define __NR_open				5
 #define __NR_close				6
-#define __NR_stat				4
-#define __NR_fstat				5
-#define __NR_lstat				6
+#define __NR_stat				127
+#define __NR_fstat				126
+#define __NR_lstat				128
 #define __NR_poll				7
 #define __NR_lseek				8
 /* OxideBSD's own invented mmap. musl's mmap() wrapper always calls __syscall6(SYS_mmap, addr,
@@ -180,7 +196,22 @@
 #define __NR_fdatasync			75
 #define __NR_truncate			76
 #define __NR_ftruncate			77
-#define __NR_getdents			78
+/* OxideBSD's own invention (129, continuing right past SYS_LSTAT = 128 -- see
+ * modules/oxfs/src/lib.rs's own doc comment in the OxideBSD tree). Matches real getdents(2)'s own
+ * wire format exactly (fd, buf, count) -> byte count written, 0 at EOF -- no argument-convention
+ * patch needed the way stat/open/chdir needed (see src/stat/stat.c's own comment on this same
+ * branch), since there's no string argument here to mismatch. readdir() (src/dirent/readdir.c)
+ * is the only caller in a static binary's own startup/stdio path that reaches this -- it calls
+ * this macro's own name, but src/internal/syscall.h has its own override sitting on top of both
+ * this and the 64-bit entry below (`#ifdef SYS_getdents64 / #undef SYS_getdents / #define
+ * SYS_getdents SYS_getdents64`, unconditionally preferring the 64-bit name whenever it's defined
+ * at all) -- so leaving the 64-bit entry at its original, inert, real-Linux value silently
+ * resurrected the exact numeric collision this remap exists to close (confirmed live: `ls` ran
+ * clean but every real `readdir()` call inside it reached "unrecognized syscall number 217", not
+ * this macro's own 129, since 217 is what `SYS_getdents` actually expanded to once that override
+ * fired). Both this entry and the 64-bit one below must carry OxideBSD's own real number, kept in
+ * sync, or this reintroduces itself the moment either one drifts. */
+#define __NR_getdents			129
 /* OxideBSD's own invention (108, not a FreeBSD-authentic number -- added once porting sh (BusyBox's
  * hush) surfaced it as unrecognized: hush's cd/prompt logic calls real getcwd()). Matches real
  * getcwd(2)'s own wire format exactly (buf, size) -> byte count including NUL, or -ERANGE if size
@@ -243,9 +274,10 @@
  * model at all yet) -- see src/process.rs's do_setpgid in the OxideBSD tree. A real, if narrow,
  * numeric collision this remap itself introduces: getresgid's own untouched-from-Linux value is
  * also 120 -- no caller in this port reaches getresgid, so this hasn't bitten anything, but it
- * would silently land on setpgid's own handler instead of cleanly failing if one ever did (same
- * "flagged, not fixed, since nothing reaches it yet" story open's own remap left for fstat --
- * see CLAUDE.md's BusyBox port section). */
+ * would silently land on setpgid's own handler instead of cleanly failing if one ever did (the
+ * same kind of "flagged, not fixed, since nothing reaches it yet" collision open's own remap once
+ * left for fstat, until stat/fstat/lstat actually got real numbers of their own -- see the
+ * stat/fstat/lstat remap near the top of this file). */
 #define __NR_setpgid			120
 /* OxideBSD's own invention (107, not a FreeBSD-authentic number), added for the same reason and at
  * the same time as the getcwd remap above -- hush reads $PPID at startup via getppid(). See
@@ -361,7 +393,10 @@
 #define __NR_epoll_ctl_old			214
 #define __NR_epoll_wait_old			215
 #define __NR_remap_file_pages		216
-#define __NR_getdents64				217
+/* Kept in sync with the plain getdents entry above (both = 129, OxideBSD's own SYS_GETDENTS) --
+ * see that entry's own comment for why leaving this one at its original, inert, real-Linux value
+ * (217) silently broke the other remap. */
+#define __NR_getdents64				129
 #define __NR_set_tid_address		218
 #define __NR_restart_syscall		219
 #define __NR_semtimedop				220
