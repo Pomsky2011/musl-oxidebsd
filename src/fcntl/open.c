@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <fcntl.h>
 #include <stdarg.h>
 #include <string.h>
@@ -18,7 +19,15 @@
  * separate macro-based path that needed the exact same fix, applied directly in
  * src/internal/syscall.h (see that file's own comment for the real bug this caused: fopen()'s own
  * sys_open() call reached oxfs_open with real flags/mode reinterpreted as OxideBSD's path
- * length/flags, walking off the end of the real filename's mapped memory). */
+ * length/flags, walking off the end of the real filename's mapped memory).
+ *
+ * A real open(2) leaves NULL-pointer validation to the kernel, which faults on the bad address
+ * and hands back EFAULT to the caller -- callers rely on getting that error back, not a crash
+ * (e.g. BusyBox vi's edit_file() path calls open(NULL, ...) on purpose when launched with no
+ * filename argument, and expects a clean failure). Computing path_len via strlen() on the
+ * userland side loses that safety net -- strlen(NULL) itself faults, in this libc rather than in
+ * the kernel, before the syscall (and its normal EFAULT handling) is ever reached. Check for NULL
+ * up front and synthesize the same EFAULT a real kernel would produce. */
 int open(const char *filename, int flags, ...)
 {
 	if ((flags & O_CREAT) || (flags & O_TMPFILE) == O_TMPFILE) {
@@ -27,6 +36,9 @@ int open(const char *filename, int flags, ...)
 		va_arg(ap, mode_t);
 		va_end(ap);
 	}
+
+	if (!filename)
+		return __syscall_ret(-EFAULT);
 
 	int fd = __syscall3(SYS_open, (long)filename, (long)strlen(filename), flags);
 
