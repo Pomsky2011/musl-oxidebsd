@@ -181,7 +181,12 @@
  * positive pid (no process-group/broadcast targeting) and signals 1-31 are supported on the
  * OxideBSD side -- see src/process.rs's do_kill in the OxideBSD tree. */
 #define __NR_kill				116
-#define __NR_uname				63
+/* OxideBSD's own invention (137, continuing right past SYS_MKDIR = 136 above). Matches real
+ * uname(2)'s exact single-pointer wire format (musl's own uname() -- src/misc/uname.c -- is just
+ * syscall(SYS_uname, uts), no derived-argument computation from the pointer the way open()'s
+ * strlen needed), so no argument-convention patch was needed beyond this number remap. See
+ * src/syscall.rs's sys_uname in the OxideBSD tree. */
+#define __NR_uname				137
 #define __NR_semget				64
 #define __NR_semop				65
 #define __NR_semctl				66
