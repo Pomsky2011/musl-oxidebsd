@@ -134,7 +134,13 @@
  * as the pipe entry above. See src/syscall.rs's sys_dup2 / src/fd.rs's dup2 in the OxideBSD tree. */
 #define __NR_dup2				106
 #define __NR_pause				34
-#define __NR_nanosleep			35
+/* OxideBSD's own invention (139, continuing right past SYS_CLOCK_GETTIME = 138). Matches real
+ * nanosleep(2)'s exact (req_ptr, rem_ptr) wire format -- musl's own nanosleep(), calling through
+ * __clock_nanosleep(CLOCK_REALTIME, 0, req, rem), reduces to exactly this shape whenever
+ * flags == 0 (the common case), so only the number needed remapping. See src/process.rs's
+ * do_nanosleep in the OxideBSD tree -- a real block-then-schedule(), woken by the timer IRQ
+ * handler once the requested tick deadline passes, not a busy-wait. */
+#define __NR_nanosleep			139
 #define __NR_getitimer			36
 #define __NR_alarm				37
 #define __NR_setitimer			38
