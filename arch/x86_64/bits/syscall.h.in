@@ -146,20 +146,63 @@
 #define __NR_setitimer			38
 #define __NR_getpid				20
 #define __NR_sendfile			40
-#define __NR_socket				41
-#define __NR_connect			42
-#define __NR_accept				43
-#define __NR_sendto				44
-#define __NR_recvfrom			45
+/* OxideBSD's own invention (140, continuing right past SYS_NANOSLEEP = 139). UDP only so far
+ * (see modules/net/src/lib.rs and src/net/udp.rs in the OxideBSD tree) -- connect/accept/listen
+ * below stay unmapped until a later phase adds TCP. socket(domain, type, protocol) needed no
+ * argument-convention patch: __socketcall's own x86_64 fallback (this file's __alt_socketcall,
+ * src/internal/syscall.h) already resolves to a plain direct syscall with the unused 4th/5th/6th
+ * slots as literal zeros, which lands exactly on this ABI's own (domain, type, protocol, _unused)
+ * 4-argument shape with no call-site changes needed. */
+#define __NR_socket				140
+/* OxideBSD's own invention (145, continuing right past SYS_setsockopt = 144 -- TCP's three new
+ * syscalls picked up the sequence in the order they were added, same story as SYS_bind's own
+ * out-of-numeric-order placement above). Unlike sendto/recvfrom, connect(fd, addr, len) needed no
+ * call-site patch: it's already only a 3-argument call, landing entirely within RDI/RSI/RDX with
+ * nothing left over for %r8/%r9 to swallow. */
+#define __NR_connect			145
+/* OxideBSD's own invention (147). Same story as SYS_connect above -- accept(fd, addr, addrlen) is
+ * only 3 arguments, all of them reach this ABI's registers untouched, so the kernel-side handler
+ * (src/net/tcp.rs's oxidebsd_sys_accept in the OxideBSD tree) can read `addr`/`addrlen` directly
+ * and write both outputs itself -- no reduction like SYS_recvfrom's `alen`-dropping trick needed
+ * here. */
+#define __NR_accept				147
+/* OxideBSD's own invention (142). Real sendto(fd, buf, len, flags, addr, alen) is a 6-argument
+ * call -- musl's own __socketcall_cp places its 5th/6th arguments (addr, alen) in %r8/%r9, both
+ * unreachable at this ABI's 4-register width (RDI/RSI/RDX/R10; see src/syscall.rs's module doc
+ * comment in the OxideBSD tree), the same class of gap SYS_open's own remap comment above
+ * documents. src/network/sendto.c is patched separately to put `addr` in the call's 4th slot
+ * (R10) in `flags`' place instead -- no MSG_* flag is meaningful here yet, and `alen` is dropped
+ * entirely since AF_INET (the only family this phase supports) always means a fixed 16-byte
+ * `struct sockaddr_in`, so the kernel-side handler in src/net/udp.rs doesn't need it as a
+ * separate wire argument. */
+#define __NR_sendto				142
+/* OxideBSD's own invention (143) -- same story as SYS_sendto above, same call-site patch shape
+ * (src/network/recvfrom.c puts `addr` in R10's slot in `flags`' place; `alen` is dropped from the
+ * wire, with the patched wrapper writing sizeof(struct sockaddr_in) into the caller's *alen
+ * itself once the syscall returns, since that value is a fixed compile-time constant here, not
+ * something the kernel needs to compute). */
+#define __NR_recvfrom			143
 #define __NR_sendmsg			46
 #define __NR_recvmsg			47
 #define __NR_shutdown			48
-#define __NR_bind				49
-#define __NR_listen				50
+/* OxideBSD's own invention (141, continuing right past SYS_recvfrom = 143 -- picked before it in
+ * the sequence for no reason beyond "this is the order these five got added in"). Matches real
+ * bind(2)'s exact (fd, addr, len) wire format -- already only 3 arguments, so no call-site patch
+ * was needed the way sendto/recvfrom above required. */
+#define __NR_bind				141
+/* OxideBSD's own invention (146). Same story as SYS_connect above -- listen(fd, backlog) is only
+ * 2 arguments, no reduction needed. */
+#define __NR_listen				146
 #define __NR_getsockname		51
 #define __NR_getpeername		52
 #define __NR_socketpair			53
-#define __NR_setsockopt			54
+/* OxideBSD's own invention (144). Real setsockopt(fd, level, optname, optval, optlen) is a
+ * 5-argument call -- its 5th argument (optlen) lands in %r8, unreachable at this ABI's 4-register
+ * width, same class of gap as sendto/recvfrom above. No call-site patch was needed to work around
+ * it, though: src/net/udp.rs's handler is a no-op stub for this phase (validates the fd is a real
+ * socket, does nothing else), so it never needed to see optval's content or length in the first
+ * place -- (fd, level, optname) in RDI/RSI/RDX is already everything it reads. */
+#define __NR_setsockopt			144
 #define __NR_getsockopt			55
 #define __NR_clone				56
 /* _Fork() (src/process/_Fork.c) prefers plain SYS_fork (a no-arg fork, exactly OxideBSD's own
