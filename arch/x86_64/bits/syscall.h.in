@@ -161,9 +161,20 @@
  * do_nanosleep in the OxideBSD tree -- a real block-then-schedule(), woken by the timer IRQ
  * handler once the requested tick deadline passes, not a busy-wait. */
 #define __NR_nanosleep			139
-#define __NR_getitimer			36
+/* OxideBSD's own invention (157), continuing right past SYS_SETITIMER = 156 below. Wire format is
+ * (which, old_ptr) -- real getitimer(2)'s own shape, unchanged (no string args, no repacking
+ * needed). See src/process.rs's do_getitimer in the OxideBSD tree. */
+#define __NR_getitimer			157
 #define __NR_alarm				37
-#define __NR_setitimer			38
+/* OxideBSD's own invention (156), continuing right past SYS_NANOSLEEP = 139. Wire format is
+ * (which, new_ptr, old_ptr) -- matches real setitimer(2)'s own shape exactly, so src/signal/
+ * setitimer.c needed no call-site patch, just this remap (sizeof(time_t) > sizeof(long) is false
+ * on this LP64 target, so setitimer() always takes the plain 3-arg syscall() path). Also backs
+ * real alarm(2): src/unistd/alarm.c is itself just a thin wrapper around setitimer(ITIMER_REAL,
+ * ...), so no separate __NR_alarm remap is needed -- that macro stays at its inert real-Linux
+ * value, unreferenced by any musl C code. See src/process.rs's do_setitimer in the OxideBSD
+ * tree. */
+#define __NR_setitimer			156
 #define __NR_getpid				20
 #define __NR_sendfile			40
 /* OxideBSD's own invention (140, continuing right past SYS_NANOSLEEP = 139). UDP only so far
