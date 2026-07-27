@@ -348,8 +348,17 @@
  * (modules/oxfs, like every other allocator in this codebase, never reclaims) -- see
  * modules/oxfs/src/lib.rs's sys_unlink in the OxideBSD tree. */
 #define __NR_unlink				109
-#define __NR_symlink			88
-#define __NR_readlink			89
+/* OxideBSD's own invention (155) -- real symlink(2) now exists (modules/oxfs's new
+ * InodeKind::Symlink). Wire format is (target_ptr, target_len, linkpath_ptr, linkpath_len), same
+ * "two path strings, no other args" shape SYS_rename already established -- src/unistd/symlink.c
+ * is patched to compute both lengths via strlen(). See modules/oxfs/src/lib.rs's oxfs_symlink in
+ * the OxideBSD tree. */
+#define __NR_symlink			155
+/* OxideBSD's own invention (154) -- real readlink(2). Wire format is (path_ptr, path_len, buf_ptr,
+ * bufsize) -- src/unistd/readlink.c is patched to compute path_len via strlen(); buf_ptr/bufsize
+ * are real readlink(2)'s own remaining two args, unchanged. See modules/oxfs/src/lib.rs's
+ * oxfs_readlink in the OxideBSD tree. */
+#define __NR_readlink			154
 #define __NR_chmod				90
 #define __NR_fchmod				91
 #define __NR_chown				92
