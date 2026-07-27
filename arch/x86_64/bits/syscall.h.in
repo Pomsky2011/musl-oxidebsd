@@ -171,7 +171,7 @@
  * setitimer.c needed no call-site patch, just this remap (sizeof(time_t) > sizeof(long) is false
  * on this LP64 target, so setitimer() always takes the plain 3-arg syscall() path). Also backs
  * real alarm(2): src/unistd/alarm.c is itself just a thin wrapper around setitimer(ITIMER_REAL,
- * ...), so no separate __NR_alarm remap is needed -- that macro stays at its inert real-Linux
+ * ...), so the plain "alarm" syscall macro right above stays unremapped at its inert real-Linux
  * value, unreferenced by any musl C code. See src/process.rs's do_setitimer in the OxideBSD
  * tree. */
 #define __NR_setitimer			156
