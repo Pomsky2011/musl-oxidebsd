@@ -195,7 +195,17 @@
 #define __NR_recvfrom			143
 #define __NR_sendmsg			46
 #define __NR_recvmsg			47
-#define __NR_shutdown			48
+/* OxideBSD's own invention (152, continuing right past SYS_socketpair = 149 -- 150/151 went to
+ * set_tid_address/fcntl below first). shutdown()'s own wrapper (src/network/shutdown.c) goes
+ * through the same __alt_socketcall x86_64 fallback socket()/socketpair() above already use: a
+ * plain direct syscall(fd, how, 0, 0, 0, 0), landing whole within 2 argument registers -- no
+ * call-site patch needed. Real semantics only exist for a crate::pipe-backed AF_UNIX socketpair
+ * endpoint (a real half-close: SHUT_WR marks that direction's buffer closed without tearing down
+ * the fd, so the peer still sees EOF once drained, but writes into it now fail) -- ENOTSOCK for
+ * anything else (a TCP/UDP socket, a plain pipe end, an oxfs file). Added to unblock BusyBox's
+ * `wget` HTTPS path: wget.c calls shutdown(fileno(sfp), SHUT_WR) after sending the request, on
+ * exactly this kind of socketpair endpoint (see CLAUDE.md's "Real networking" known-gaps entry). */
+#define __NR_shutdown			152
 /* OxideBSD's own invention (141, continuing right past SYS_recvfrom = 143 -- picked before it in
  * the sequence for no reason beyond "this is the order these five got added in"). Matches real
  * bind(2)'s exact (fd, addr, len) wire format -- already only 3 arguments, so no call-site patch
@@ -265,7 +275,16 @@
 #define __NR_msgsnd				69
 #define __NR_msgrcv				70
 #define __NR_msgctl				71
-#define __NR_fcntl				72
+/* OxideBSD's own invention (151). musl's fcntl() wrapper (src/fcntl/fcntl.c) is variadic in C but
+ * always resolves to a plain 3-argument syscall(SYS_fcntl, fd, cmd, arg) for every command this
+ * kernel implements (F_GETFL/F_SETFL/F_SETFD/F_DUPFD/F_DUPFD_CLOEXEC) -- already only 3 arguments,
+ * no call-site patch needed. Only enough of real fcntl(2) to cover what BusyBox's own
+ * libbb/xfuncs.c (ndelay_on/ndelay_off/close_on_exec_on) and musl's own F_DUPFD_CLOEXEC fallback
+ * dance actually call; everything else is EINVAL. Added to unblock BusyBox's `wget` HTTPS path
+ * (its progress-bar/timeout loop wants real O_NONBLOCK on the response stream) -- see CLAUDE.md's
+ * "Real networking" known-gaps entry and src/syscall.rs's own sys_fcntl doc comment for the full
+ * story on what's actually implemented. */
+#define __NR_fcntl				151
 #define __NR_flock				73
 #define __NR_fsync				74
 #define __NR_fdatasync			75
@@ -472,7 +491,16 @@
  * see that entry's own comment for why leaving this one at its original, inert, real-Linux value
  * (217) silently broke the other remap. */
 #define __NR_getdents64				129
-#define __NR_set_tid_address		218
+/* OxideBSD's own invention (150, continuing right past SYS_socketpair = 149). Called unconditionally
+ * by every musl-linked program at startup (src/env/__init_tls.c) and again after every real fork()
+ * (src/process/_Fork.c), storing the result as the calling thread's own tid -- previously entirely
+ * unregistered, so every process here silently ran with tid = -ENOSYS the whole time (harmless so
+ * far, nothing reads pthread_self()->tid for anything correctness-critical, but a real gap found
+ * while tracing an unrelated wget HTTPS failure). No real threading exists on this kernel, so tid
+ * and pid are the same concept -- src/syscall.rs's sys_set_tid_address just echoes the caller's
+ * own pid back, ignoring the tidptr argument entirely (no clear_child_tid futex-wake to honor
+ * without real pthread_create-spawned threads). */
+#define __NR_set_tid_address		150
 #define __NR_restart_syscall		219
 #define __NR_semtimedop				220
 #define __NR_fadvise64				221
