@@ -112,7 +112,16 @@
 #define __NR_ioctl				124
 #define __NR_pread64			17
 #define __NR_pwrite64			18
-#define __NR_readv				19
+/* OxideBSD's own invention (153, continuing right past SYS_shutdown = 152). musl's entire stdio
+ * *read* path goes through readv, not plain read, whenever a FILE* has real internal buffering
+ * (src/stdio/__stdio_read.c -- a 2-iovec scatter-read: the caller's own buffer plus musl's own
+ * internal FILE buffer) -- the exact same "musl doesn't call the simpler syscall you'd expect"
+ * story writev already told below, just found much later: nothing had exercised a *buffered*
+ * fread()/fgets() call against a real, slow-arriving data source until BusyBox's wget actually
+ * downloaded a real file over HTTPS (confirmed live -- the whole TLS/TCP fix chain worked, real
+ * response bytes came through, then this surfaced on the very next buffered read). See
+ * src/syscall.rs's sys_readv in the OxideBSD tree. */
+#define __NR_readv				153
 /* OxideBSD's own invention, added specifically because musl's entire stdio write path
  * (src/stdio/__stdio_write.c) goes through writev, never plain write -- discovered the hard way:
  * left unmapped (at Linux's original value, 20), this collided with OxideBSD's own
