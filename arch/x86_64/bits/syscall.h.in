@@ -370,9 +370,21 @@
  * are real readlink(2)'s own remaining two args, unchanged. See modules/oxfs/src/lib.rs's
  * oxfs_readlink in the OxideBSD tree. */
 #define __NR_readlink			154
-#define __NR_chmod				90
+/* OxideBSD's own invention (165), continuing the sequence right past SYS_GETGROUPS (164, below).
+ * Real chmod(2)'s wire format is (path, mode) -- src/stat/chmod.c is patched to compute path_len
+ * via strlen() and pass (path_ptr, path_len, mode), the same length-prefixed-path convention
+ * open()/chdir()/rename() already use. See modules/oxfs/src/lib.rs's oxfs_chmod in the OxideBSD
+ * tree for the real per-inode mode/EPERM logic this now backs. Left at its original value (90)
+ * this collides with nothing else remapped in this file -- harmless either way, since nothing
+ * called chmod before this pass. */
+#define __NR_chmod				165
 #define __NR_fchmod				91
-#define __NR_chown				92
+/* OxideBSD's own invention (166) -- real chown(2)'s wire format is (path, uid, gid) -- src/unistd/
+ * chown.c is patched to compute path_len via strlen() and pass (path_ptr, path_len, uid, gid),
+ * using all four of this ABI's argument registers the same way SYS_RENAME/SYS_SYMLINK already do.
+ * See modules/oxfs/src/lib.rs's oxfs_chown in the OxideBSD tree for the real root-only ownership
+ * logic and the (uid_t)-1/(gid_t)-1 "leave unchanged" convention this backs. */
+#define __NR_chown				166
 #define __NR_fchown				93
 #define __NR_lchown				94
 #define __NR_umask				95
@@ -382,13 +394,36 @@
 #define __NR_sysinfo			99
 #define __NR_times				100
 #define __NR_ptrace				101
-#define __NR_getuid				102
+/* OxideBSD's own invention (158), continuing the sequence right past SYS_GETITIMER (157). Real
+ * zero-argument getuid(2) -- no argument-convention patch needed, only the number. Left at its
+ * original value (102) this silently collides with OxideBSD's own real brk (see SYS_BRK's own
+ * remap, arch/x86_64/bits/syscall.h.in's mmap/munmap/brk/set_fs_base/writev block) -- a real,
+ * previously-latent numeric collision this remap incidentally fixes, harmless only because nothing
+ * called getuid before this pass. See src/process.rs's do_getuid / modules/posix_compat/src/lib.rs
+ * in the OxideBSD tree. */
+#define __NR_getuid				158
 #define __NR_syslog				103
-#define __NR_getgid				104
-#define __NR_setuid				105
-#define __NR_setgid				106
-#define __NR_geteuid			107
-#define __NR_getegid			108
+/* OxideBSD's own invention (160) -- getuid's own counterpart for getgid(2). Left at its original
+ * value (104) this collides with OxideBSD's own real writev, same latent-collision story as
+ * getuid/brk above. */
+#define __NR_getgid				160
+/* OxideBSD's own invention (162) -- real single-argument setuid(uid_t). Left at its original value
+ * (105) this collides with OxideBSD's own real pipe, same latent-collision story as getuid/brk
+ * above. See src/process.rs's do_setuid for the real root-may-become-anyone / anyone-may-become-
+ * itself POSIX permission rule this enforces. */
+#define __NR_setuid				162
+/* OxideBSD's own invention (163) -- setuid's own counterpart for setgid(gid_t). Left at its
+ * original value (106) this collides with OxideBSD's own real dup2, same latent-collision story as
+ * getuid/brk above. */
+#define __NR_setgid				163
+/* OxideBSD's own invention (159) -- geteuid's own counterpart, echoing the same Process::uid field
+ * getuid does (no distinct effective uid modeled, see src/process.rs's Process::uid doc comment).
+ * Left at its original value (107) this collides with OxideBSD's own real getppid (see its own
+ * remap below) -- a real, previously-latent numeric collision this remap incidentally fixes. */
+#define __NR_geteuid			159
+/* OxideBSD's own invention (161) -- geteuid's own counterpart for getegid(2). Left at its original
+ * value (108) this collides with nothing else remapped in this file. */
+#define __NR_getegid			161
 /* OxideBSD's own invention (120), continuing the sequence right past rt_sigreturn (119) -- but
  * matches real setpgid(2)'s exact (pid, pgid) wire format, same "no argument-convention patch
  * needed" story kill/rt_sigaction/rt_sigprocmask above already have. Left at its original value
@@ -410,7 +445,13 @@
 #define __NR_setsid				112
 #define __NR_setreuid			113
 #define __NR_setregid			114
-#define __NR_getgroups			115
+/* OxideBSD's own invention (164), continuing the sequence right past SYS_SETGID (163, above).
+ * Real (int size, gid_t list[]) wire format -- no argument-convention patch needed (a plain
+ * (size, ptr) pair, no string argument to mismatch). Left at its original value (115) this
+ * collides with nothing else remapped in this file. See src/process.rs's do_getgroups for why
+ * reporting a single-element list (the caller's own gid) is the complete, correct answer on a
+ * kernel with no supplementary-group concept. */
+#define __NR_getgroups			164
 #define __NR_setgroups			116
 #define __NR_setresuid			117
 #define __NR_getresuid			118
