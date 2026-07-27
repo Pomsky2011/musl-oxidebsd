@@ -49,7 +49,18 @@
 #define __NR_stat				127
 #define __NR_fstat				126
 #define __NR_lstat				128
-#define __NR_poll				7
+/* OxideBSD's own invention (148, continuing right past SYS_accept = 147). Real Linux's inert
+ * value (7) collides with this ABI's own SYS_WAIT4 -- left unremapped, a real poll() call would
+ * have silently landed in wait4's handler instead (the same class of bug this file's own
+ * getdents/getdents64 comment, and CLAUDE.md's musl section, both warn about). musl's poll()
+ * wrapper (src/select/poll.c) calls a plain 3-argument syscall_cp(SYS_poll, fds, n, timeout) when
+ * SYS_poll is defined at all (skipping its own ppoll-based fallback entirely) -- already only 3
+ * arguments, landing whole in RDI/RSI/RDX, so no call-site patch was needed. Added to unblock a
+ * real DNS resolver: musl's own stub resolver (src/network/res_msend.c) is a real userspace UDP
+ * client already built on socket/sendto/recvfrom, but multiplexes retries across nameservers with
+ * a real poll() -- src/net/mod.rs's oxidebsd_sys_poll is the kernel-side implementation, checking
+ * per-socket receive-queue readiness across udp/tcp/icmp. */
+#define __NR_poll				148
 #define __NR_lseek				8
 /* OxideBSD's own invented mmap. musl's mmap() wrapper always calls __syscall6(SYS_mmap, addr,
  * len, prot, flags, fd, off) -- OxideBSD's ABI only wires 3 argument registers through to a
@@ -195,7 +206,17 @@
 #define __NR_listen				146
 #define __NR_getsockname		51
 #define __NR_getpeername		52
-#define __NR_socketpair			53
+/* OxideBSD's own invention (149, continuing right past SYS_poll = 148). Real Linux's inert value
+ * (53) is left unremapped/unused -- no collision risk the way getdents/poll had, it just never
+ * pointed anywhere real before. musl's socketpair() wrapper (src/network/socketpair.c) goes
+ * through the same __alt_socketcall x86_64 fallback socket()/bind()/connect() above already use:
+ * a plain direct syscall(domain, type, protocol, fd, 0, 0), unused 5th/6th slots as literal
+ * zeros, landing whole within this ABI's 4-register width (RDI/RSI/RDX/R10) -- no call-site patch
+ * needed, same story as SYS_socket's own comment above. Added specifically to unblock BusyBox's
+ * `wget` HTTPS path: its spawn_ssl_client (networking/wget.c) forks a TLS-helper child and hands
+ * it the network fd over a local AF_UNIX/SOCK_STREAM socketpair, with no fallback if one doesn't
+ * exist -- see CLAUDE.md's own "Real networking" known-gaps entry. */
+#define __NR_socketpair			149
 /* OxideBSD's own invention (144). Real setsockopt(fd, level, optname, optval, optlen) is a
  * 5-argument call -- its 5th argument (optlen) lands in %r8, unreachable at this ABI's 4-register
  * width, same class of gap as sendto/recvfrom above. No call-site patch was needed to work around

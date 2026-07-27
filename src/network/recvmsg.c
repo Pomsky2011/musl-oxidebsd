@@ -3,6 +3,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <string.h>
+#include <errno.h>
 #include "syscall.h"
 
 hidden void __convert_scm_timestamps(struct msghdr *, socklen_t);
@@ -47,22 +48,27 @@ void __convert_scm_timestamps(struct msghdr *msg, socklen_t csize)
 	memcpy(CMSG_DATA(cmsg), &tvts, sizeof tvts);
 }
 
+/* OxideBSD patch: no real recvmsg(2) syscall exists on this ABI -- __NR_recvmsg's real,
+ * unremapped Linux value is inert here (nothing registers it), so every call used to fail with
+ * ENOSYS. This is the actual reason it needed fixing at all: real DNS resolution
+ * (third_party/musl/src/network/res_msend.c) reads UDP replies via recvmsg(), not recvfrom(),
+ * even though it only ever uses a single iovec and no ancillary data -- exactly the shape
+ * already-patched recvfrom() (this directory's own recvfrom.c) handles. Before this fix, every
+ * reply the kernel correctly delivered got silently dropped here, and since the queued reply
+ * never got consumed, a caller polling the same fd in a loop (res_msend.c does exactly this) saw
+ * it as perpetually ready -- a tight busy-loop until the resolver's own overall timeout gave up,
+ * not a real deadlock, but indistinguishable from a hang for however long that timeout was.
+ *
+ * Multi-iovec/control-message callers (nothing in this port's roster needs either) get a clean
+ * error instead of silently dropping data or misreading the buffer -- no `__convert_scm_timestamps`
+ * call needed since a control-message request is exactly the case rejected above. */
 ssize_t recvmsg(int fd, struct msghdr *msg, int flags)
 {
-	ssize_t r;
-	socklen_t orig_controllen = msg->msg_controllen;
-#if LONG_MAX > INT_MAX
-	struct msghdr h, *orig = msg;
-	if (msg) {
-		h = *msg;
-		h.__pad1 = h.__pad2 = 0;
-		msg = &h;
+	if (msg->msg_iovlen > 1 || msg->msg_control) {
+		errno = ENOTSUP;
+		return -1;
 	}
-#endif
-	r = socketcall_cp(recvmsg, fd, msg, flags, 0, 0, 0);
-	if (r >= 0) __convert_scm_timestamps(msg, orig_controllen);
-#if LONG_MAX > INT_MAX
-	if (orig) *orig = h;
-#endif
-	return r;
+	void *buf = msg->msg_iovlen ? msg->msg_iov[0].iov_base : 0;
+	size_t len = msg->msg_iovlen ? msg->msg_iov[0].iov_len : 0;
+	return recvfrom(fd, buf, len, flags, msg->msg_name, &msg->msg_namelen);
 }
