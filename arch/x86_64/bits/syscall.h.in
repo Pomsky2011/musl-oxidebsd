@@ -257,11 +257,20 @@
 #define __NR_getsockopt			55
 #define __NR_clone				56
 /* _Fork() (src/process/_Fork.c) prefers plain SYS_fork (a no-arg fork, exactly OxideBSD's own
- * SYS_FORK=2) over SYS_clone whenever SYS_fork is defined -- true here, so SYS_clone/SYS_vfork
- * are never reached by musl's own fork() and are left unmapped (real `clone(2)`-with-flags
- * semantics don't exist on OxideBSD at all yet). */
+ * SYS_FORK=2) over SYS_clone whenever SYS_fork is defined -- true here, so SYS_clone is never
+ * reached by musl's own fork() and is left unmapped (real `clone(2)`-with-flags semantics don't
+ * exist on OxideBSD at all yet). The real libc *vfork()* entry point (a separate, directly
+ * callable function, not something fork() calls into) is a different story: it's hand-written
+ * x86_64 asm (src/process/x86_64/vfork.s) that invokes its raw syscall number directly, bypassing
+ * this table entirely -- so this macro itself was never actually load-bearing for vfork()'s own
+ * real behavior, and is left here at this table's own SYS_fork value (2) purely for a reader's
+ * benefit, not because anything still resolves this particular macro symbolically (confirmed:
+ * nothing in src/ references it by name). vfork.s itself now hardcodes 2 directly, with its own
+ * comment explaining why
+ * (OxideBSD has no true vfork share-until-exec semantics, so aliasing it to a real fork() is the
+ * standard's own explicitly-allowed implementation). */
 #define __NR_fork				2
-#define __NR_vfork				58
+#define __NR_vfork				2
 /* Numerically unchanged from upstream (59 happens to already be OxideBSD's real SYS_EXECVE), but
  * NOT actually argument-compatible yet, same category of gap as SYS_open above: musl's execve()
  * passes (path, argv, envp) in RDI/RSI/RDX; OxideBSD's SYS_EXECVE (src/process.rs::do_execve)
@@ -639,7 +648,17 @@
 #define __NR_sync_file_range		277
 #define __NR_vmsplice				278
 #define __NR_move_pages				279
-#define __NR_utimensat				280
+/* OxideBSD's own invention (167, next after this table's own SYS_chown value of 166) -- real
+ * utimensat(2)'s wire
+ * format is (fd, path, times, flags); src/stat/utimensat.c is patched to drop the always-AT_FDCWD
+ * fd (this port has no real dirfd-relative resolution, same limitation every other *at()-shaped
+ * call already patched here accepts) and compute path_len via strlen(), passing
+ * (path_ptr, path_len, times_ptr, flags) -- same "drop the fd, add a computed length" shape
+ * chown()/rename() already use. See modules/oxfs/src/lib.rs's oxfs_utimensat in the OxideBSD tree:
+ * a real ENOENT-for-a-missing-path / success-for-an-existing-one stub, no real timestamp storage
+ * (this filesystem has none at all yet) -- enough for BusyBox's touch.c, whose own fallback to
+ * open(O_CREAT) on ENOENT is what actually creates a new file. */
+#define __NR_utimensat				167
 #define __NR_epoll_pwait			281
 #define __NR_signalfd				282
 #define __NR_timerfd_create			283
