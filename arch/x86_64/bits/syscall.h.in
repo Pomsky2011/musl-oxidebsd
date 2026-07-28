@@ -514,6 +514,16 @@
 #define __NR_sync					162
 #define __NR_acct					163
 #define __NR_settimeofday			164
+/* Real mount(2)'s wire format is (special, dir, fstype, flags, data) -- five conceptual args,
+ * doesn't fit OxideBSD's own 4-register ABI. src/linux/mount.c is patched to dispatch to one of
+ * two OxideBSD-invented syscalls, borrowing the still-real, still-distinctly-named macros
+ * create_module/init_module below (deliberately placed on numbers well clear of this file's own
+ * densely-packed 160s-170s range -- see their own comment for why) based on its own real
+ * fstype/flags arguments (a bind mount or a tmpfs mount -- the only two shapes modules/oxfs's own
+ * mount table supports; see that module's "Mount table" section), rather than remapping this name
+ * to a single idealized shape the way chown()/rename() were. This macro itself is left at its
+ * original, inert real-Linux value -- nothing calls it directly anymore. umount()/umount2() are
+ * patched too, borrowing delete_module below the same way -- see that macro's own comment for why. */
 #define __NR_mount					165
 #define __NR_umount2				166
 #define __NR_swapon					167
@@ -523,8 +533,43 @@
 #define __NR_setdomainname			171
 #define __NR_iopl					172
 #define __NR_ioperm					173
+/* Remapped to OxideBSD's own invention (174) -- the mount table's bind-mount syscall (see the
+ * mount comment above). Deliberately *not* named/placed as a brand-new macro right after
+ * SYS_UTIMENSAT=167 the way every other recent addition has been: real Linux's 168/169/170 are
+ * swapoff/reboot/sethostname, all three of which are already-seeded, already-built BusyBox
+ * applets in this port's roster (swapoff/reboot/halt/poweroff/hostname -- see
+ * docs/BUSYBOX_APPLETS.md's own NEEDS_BLOCKDEV/NEEDS_SYSCALL rows and CLAUDE.md's "gethostname" gap
+ * row) that currently ENOSYS cleanly and honestly; claiming those numbers here would have silently
+ * misrouted a real future/attempted call from any of them into the mount table instead -- caught
+ * during review, not live, but the exact bug class CLAUDE.md's own musl-port section documents at
+ * length (getdents/getdents64, ENOSYS's real value, ...). This macro and the two below are real
+ * Linux syscalls, but ones no code in this tree references at all: musl's own src/linux/module.c
+ * wraps them, but nothing in the built BusyBox roster reaches that file -- insmod/rmmod/modprobe
+ * never even became build candidates in this port (see docs/BUSYBOX_APPLETS.md's own
+ * "missing-from-this-list" note on lsmod, which explains why kernel-module-loading tools were
+ * deliberately left unbuilt in favor of a purpose-built native `lsoxmod`), and all three real
+ * syscalls are themselves long-obsolete on modern real Linux too (superseded by finit_module), so
+ * they're in no danger of becoming relevant here either. Unlike chown()/utimensat()'s own remaps,
+ * this one keeps the real Linux name (`create_module` -- musl's own src/linux/module.c already
+ * has real wrappers named `create_module`/`init_module`/`delete_module`, so reusing them costs
+ * nothing) rather than inventing a fictional new macro name this file's own sed-based generator
+ * (see the Makefile rule that builds obj/include/bits/syscall.h) would never actually produce. See
+ * modules/oxfs/src/lib.rs's oxfs_mount_bind in the OxideBSD tree: (source_ptr, source_len,
+ * target_ptr, target_len). */
 #define __NR_create_module			174
+/* OxideBSD's own invention (175) -- the mount table's tmpfs-mount syscall, see create_module's own
+ * comment above for why this reuses the real init_module name/number rather than a fictional one.
+ * (target_ptr, target_len, _, _). modules/oxfs/src/lib.rs's oxfs_mount_tmpfs in the OxideBSD tree. */
 #define __NR_init_module			175
+/* Remapped to OxideBSD's own invention (176) -- real umount2(2)'s own (special, flags) wire format
+ * fits this ABI's 4 registers whole once path_len is added, the same "compute strlen() explicitly"
+ * patch chown()/rename() already use, no shape change needed otherwise. src/linux/mount.c's
+ * umount()/umount2() are patched to call this real delete_module name/number directly (same
+ * reasoning as create_module's own comment above) rather than this file's own umount2 macro (two
+ * entries above, at its original real-Linux slot), which stays at its original, inert real-Linux
+ * value (166) -- nothing calls it directly anymore.
+ * modules/oxfs/src/lib.rs's oxfs_umount2 in the OxideBSD tree -- flags accepted, not enforced (no
+ * MNT_FORCE/MNT_DETACH). */
 #define __NR_delete_module			176
 #define __NR_get_kernel_syms		177
 #define __NR_query_module			178
