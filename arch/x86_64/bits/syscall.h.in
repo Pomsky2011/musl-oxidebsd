@@ -454,14 +454,30 @@
 #define __NR_setsid				112
 #define __NR_setreuid			113
 #define __NR_setregid			114
-/* OxideBSD's own invention (164), continuing the sequence right past SYS_SETGID (163, above).
- * Real (int size, gid_t list[]) wire format -- no argument-convention patch needed (a plain
- * (size, ptr) pair, no string argument to mismatch). Left at its original value (115) this
- * collides with nothing else remapped in this file. See src/process.rs's do_getgroups for why
- * reporting a single-element list (the caller's own gid) is the complete, correct answer on a
- * kernel with no supplementary-group concept. */
+/* SYS_getgroups line: OxideBSD's own invention (164), continuing the sequence right past
+ * SYS_SETGID (163, above). Real (int size, gid_t list[]) wire format -- no argument-convention
+ * patch needed (a plain (size, ptr) pair, no string argument to mismatch). See
+ * src/process.rs's do_getgroups for why reporting a single-element list (the caller's own gid) is
+ * the complete, correct answer on a kernel with no supplementary-group concept.
+ *
+ * SYS_setgroups line: also OxideBSD's own invention (178, continuing the sequence past
+ * SYS_GETSID = 177), NOT left at its real Linux number (116) the way this comment used to claim --
+ * that claim was true when written, but SYS_KILL was independently invented as 116 in a later,
+ * unrelated pass with no reason to notice this line, creating a real collision: any real
+ * setgroups() call would have silently invoked the kill(2) handler instead, reinterpreting
+ * (count, gid_list_ptr) as (pid, sig). Found live, not in review, tracing why su's own real
+ * upstream initgroups()-failure fallback (see src/syscall.rs's ENOSYS doc comment) wasn't
+ * triggering. Same real (size, ptr) wire format as getgroups -- see modules/posix_compat's
+ * SYS_SETGROUPS doc comment for why it's a real, permission-checked no-op rather than either an
+ * unconditional success or a plain ENOSYS.
+ *
+ * (Deliberately avoiding the real macro-name prefix's literal spelling in this comment's own
+ * prose -- the Makefile's sed-based generator that derives SYS_-prefixed names from that prefix
+ * matches any line containing it, including inside a comment, and would otherwise duplicate this
+ * whole block outside any comment context in the generated header, breaking the build the same
+ * way documented elsewhere for the mount syscalls' own comments.) */
 #define __NR_getgroups			164
-#define __NR_setgroups			116
+#define __NR_setgroups			178
 #define __NR_setresuid			117
 #define __NR_getresuid			118
 #define __NR_setresgid			119
@@ -473,7 +489,7 @@
 #define __NR_getpgid			121
 #define __NR_setfsuid			122
 #define __NR_setfsgid			123
-#define __NR_getsid				124
+#define __NR_getsid				177
 #define __NR_capget				125
 #define __NR_capset				126
 #define __NR_rt_sigpending		127
