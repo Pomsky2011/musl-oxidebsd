@@ -314,11 +314,38 @@
  * "Real networking" known-gaps entry and src/syscall.rs's own sys_fcntl doc comment for the full
  * story on what's actually implemented. */
 #define __NR_fcntl				151
-#define __NR_flock				73
-#define __NR_fsync				74
+/* OxideBSD's own invention (475), the first of a 16-number batch (471-486) landing well past this
+ * file's own real, highest-numbered entry (listns = 470, right near this file's end) --
+ * chosen deliberately, not just "the next free-looking slot": a first attempt at this batch tried
+ * continuing this ABI's own existing invented sequence right past SYS_SETGROUPS = 178 (i.e.
+ * 179-194), which turned out to silently collide with a *second* set of real, still-inert Linux
+ * syscalls sharing those exact same numbers further down this same file (quotactl = 179,
+ * gettid = 186, setxattr = 188, ...) -- and gettid in particular has a real caller
+ * inside musl itself (src/thread/synccall.c), a live landmine, not a hypothetical one, caught only
+ * by actually grepping musl's own source tree before trusting the number. Every real x86_64 Linux
+ * syscall this vendored header will ever define already has an entry somewhere in this file (it's
+ * a frozen fork, pinned to tag v1.2.6 -- see CLAUDE.md's own musl-port section -- so nothing will
+ * ever extend the real table past what's already here short of a deliberate future re-pin), so
+ * 471+ is permanently, provably collision-free rather than merely collision-free today. src/linux/
+ * flock.c is an unmodified single-syscall wrapper -- only the number needed remapping. See
+ * modules/oxfs/src/lib.rs's oxfs_flock in the OxideBSD tree: a real per-inode LOCK_SH/LOCK_EX/
+ * LOCK_UN advisory-lock table, but a request that would block (no LOCK_NB) fails EWOULDBLOCK
+ * immediately rather than genuinely blocking -- this kernel's modules have no scheduler-yield
+ * primitive, and a real spin-wait here would permanently deadlock against the lock holder (which
+ * could never run to release it) on this single-core, non-preemptive scheduler. */
+#define __NR_flock				475
+/* OxideBSD's own invention (471) -- see flock's own comment just above for the full story on
+ * why this whole 16-number batch landed at 471-486 specifically. src/unistd/fsync.c is unmodified
+ * -- only the number needed remapping. See modules/oxfs/src/lib.rs's oxfs_fsync: a real
+ * force-commit of that fd's pending write buffer to its inode (this filesystem's write model
+ * otherwise only commits at close()). */
+#define __NR_fsync				471
 #define __NR_fdatasync			75
 #define __NR_truncate			76
-#define __NR_ftruncate			77
+/* OxideBSD's own invention (473) -- see flock's own comment above for the full story on why
+ * this whole batch landed at 471-486. src/unistd/ftruncate.c is unmodified -- only the number
+ * needed remapping. See modules/oxfs/src/lib.rs's oxfs_ftruncate. */
+#define __NR_ftruncate			473
 /* OxideBSD's own invention (129, continuing right past SYS_LSTAT = 128 -- see
  * modules/oxfs/src/lib.rs's own doc comment in the OxideBSD tree). Matches real getdents(2)'s own
  * wire format exactly (fd, buf, count) -> byte count written, 0 at EOF -- no argument-convention
@@ -396,8 +423,28 @@
 #define __NR_chown				166
 #define __NR_fchown				93
 #define __NR_lchown				94
-#define __NR_umask				95
+/* OxideBSD's own invention (487) -- continues the same 471-486 batch one past SYS_REBOOT=486 (see
+ * flock's own comment, up near fsync, for the full story on why that whole batch landed at
+ * 471-486 rather than continuing this ABI's own earlier 100-178 invented sequence). Found live:
+ * BusyBox's libbb/parse_mode.c calls umask(0)/umask(old_mask) unconditionally whenever it parses a
+ * symbolic mode string (chmod +x/-w/u+rwx/...), to compute the ambient umask a relative symbolic
+ * change should respect -- with this unmapped, that call silently invoked whatever real syscall
+ * happened to sit at this ABI's own number 95 at the time (nothing, before this fix -- a clean,
+ * logged ENOSYS), and musl's own umask() wrapper (src/stat/umask.c) returns the raw syscall result
+ * directly with no error check at all (real POSIX umask() cannot fail), so parse_mode.c silently
+ * computed its symbolic-mode arithmetic against a garbage negative-errno value instead of a real
+ * mask -- caught testing `chmod +x` on a real script for the first time. src/stat/umask.c is
+ * unmodified -- only the number needed remapping, real umask(mode_t) already fits this ABI's
+ * single-argument convention whole. See src/process.rs's do_umask: a real per-process
+ * Process::umask (default 0o022, the standard real Unix default), copied by fork/preserved by
+ * execve like rlimits/nice/sched_policy -- stored and returned honestly (real POSIX semantics:
+ * always succeeds, returns the previous mask), but not actually consulted anywhere oxfs creates a
+ * new inode -- the same "stored, not enforced" tier those three fields already established. */
+#define __NR_umask				487
 #define __NR_gettimeofday		96
+/* Left at its original, inert real-Linux value -- see setrlimit's own comment (further down
+ * this file) for why: both this and that fall back to it only if the now-implemented 
+ * prlimit64 returns ENOSYS, which it no longer does. */
 #define __NR_getrlimit			97
 #define __NR_getrusage			98
 #define __NR_sysinfo			99
@@ -502,17 +549,63 @@
 #define __NR_uselib				134
 #define __NR_personality		135
 #define __NR_ustat				136
-#define __NR_statfs				137
-#define __NR_fstatfs			138
+/* OxideBSD's own invention (476) -- real x86_64 Linux's own value (137) is already independently
+ * claimed by this ABI's own SYS_UNAME. src/stat/statvfs.c's __statfs is unmodified (no
+ * SYS_statfs64 exists for x86_64, so it already calls this plain macro) -- only the number needed
+ * remapping. See modules/oxfs/src/lib.rs's oxfs_statfs: a real struct statfs built from this
+ * filesystem's own live NUM_BLOCKS/BLOCK_USED/MAX_INODES/INODES counts (separately for the real
+ * vs. tmpfs pool), backing df's real statvfs(3) call. */
+#define __NR_statfs				476
+/* OxideBSD's own invention (477) -- real x86_64 Linux's own value (138) is already independently
+ * claimed by this ABI's own SYS_CLOCK_GETTIME. src/stat/statvfs.c's __fstatfs is unmodified --
+ * only the number needed remapping. See modules/oxfs/src/lib.rs's oxfs_fstatfs, statfs's own
+ * counterpart above. */
+#define __NR_fstatfs			477
 #define __NR_sysfs				139
-#define __NR_getpriority			140
-#define __NR_setpriority			141
+/* OxideBSD's own invention (480) -- real x86_64 Linux's own value (140) is already independently
+ * claimed by this ABI's own SYS_SOCKET. src/misc/getpriority.c is unmodified (it un-shifts the
+ * kernel's own 20-nice convention client-side) -- only the number needed remapping. See
+ * modules/oxfs/src/lib.rs's -- no, src/process.rs's do_getpriority in the OxideBSD tree: returns
+ * 20 - Process::nice, no real scheduling effect (this kernel's cooperative round-robin scheduler
+ * has no priority concept at all -- stored and echoed back honestly, not enforced). */
+#define __NR_getpriority			480
+/* OxideBSD's own invention (479) -- real x86_64 Linux's own value (141) is already independently
+ * claimed by this ABI's own SYS_BIND. src/misc/setpriority.c is unmodified -- only the number
+ * needed remapping. See getpriority's own comment just above for the real (stored, not
+ * enforced) semantics this backs. */
+#define __NR_setpriority			479
 #define __NR_sched_setparam			142
-#define __NR_sched_getparam			143
-#define __NR_sched_setscheduler		144
-#define __NR_sched_getscheduler		145
-#define __NR_sched_get_priority_max	146
-#define __NR_sched_get_priority_min	147
+/* OxideBSD's own invention (483) -- real x86_64 Linux's own value (143) is already independently
+ * claimed by this ABI's own SYS_RECVFROM. util-linux/chrt.c calls this macro directly via a raw
+ * syscall() (bypassing musl's own sched_getparam(), permanently stubbed to ENOSYS -- see
+ * src/sched/sched_getparam.c) -- only the number needed remapping. See src/process.rs's
+ * do_sched_getparam: writes back Process::sched_priority into the caller's struct sched_param, no
+ * real RT scheduling effect. */
+#define __NR_sched_getparam			483
+/* OxideBSD's own invention (481) -- real x86_64 Linux's own value (144) is already independently
+ * claimed by this ABI's own SYS_SETSOCKOPT. util-linux/chrt.c calls this macro directly via a raw
+ * syscall() (musl's own sched_setscheduler() is permanently stubbed to ENOSYS -- see
+ * src/sched/sched_setscheduler.c) -- only the number needed remapping. See src/process.rs's
+ * do_sched_setscheduler: stores Process::sched_policy/sched_priority, no real RT scheduling
+ * effect -- this kernel's cooperative round-robin scheduler has no priority classes at all. */
+#define __NR_sched_setscheduler		481
+/* OxideBSD's own invention (482) -- real x86_64 Linux's own value (145) is already independently
+ * claimed by this ABI's own SYS_CONNECT. util-linux/chrt.c calls this macro directly via a raw
+ * syscall() (musl's own sched_getscheduler() is permanently stubbed to ENOSYS -- see
+ * src/sched/sched_getscheduler.c) -- only the number needed remapping. See src/process.rs's
+ * do_sched_getscheduler: echoes back the stored Process::sched_policy. */
+#define __NR_sched_getscheduler		482
+/* OxideBSD's own invention (484) -- real x86_64 Linux's own value (146) is already independently
+ * claimed by this ABI's own SYS_LISTEN. src/sched/sched_get_priority_max.c is unmodified -- only
+ * the number needed remapping. See src/process.rs's do_sched_get_priority_max: a fixed,
+ * real-Linux-matching range per policy (SCHED_FIFO/SCHED_RR -> 1..99, everything else -> 0..0),
+ * not backed by any real scheduling class this kernel implements. */
+#define __NR_sched_get_priority_max	484
+/* OxideBSD's own invention (485) -- real x86_64 Linux's own value (147) is already independently
+ * claimed by this ABI's own SYS_ACCEPT. src/sched/sched_get_priority_max.c (sched_get_priority_min
+ * lives in the same file) is unmodified -- only the number needed remapping. See 
+ * sched_get_priority_max's own comment just above. */
+#define __NR_sched_get_priority_min	485
 #define __NR_sched_rr_get_interval	148
 #define __NR_mlock					149
 #define __NR_munlock				150
@@ -525,9 +618,22 @@
 #define __NR_prctl					157
 #define __NR_arch_prctl				158
 #define __NR_adjtimex				159
+/* getrlimit (97, above) and setrlimit (160, just below) are both left at their original,
+ * inert real-Linux values -- src/misc/getrlimit.c/setrlimit.c both try prlimit64 first
+ * unconditionally (see that macro's own comment, further down this file) and only fall back to
+ * this legacy pair if prlimit64 itself returns ENOSYS. Since prlimit64 is now implemented and
+ * succeeds, neither macro is ever reached at runtime -- but note setrlimit's real value
+ * (160) would collide with this ABI's own SYS_GETGID=160 if it ever were: a real landmine
+ * avoided, not (yet) triggered, the same class of bug setgroups's own comment on this file
+ * documents at length. */
 #define __NR_setrlimit				160
 #define __NR_chroot					161
-#define __NR_sync					162
+/* OxideBSD's own invention (472) -- see flock's own comment (up near fsync) for why this
+ * whole batch is uniformly renumbered rather than kept at each syscall's own real (here, actually
+ * free) value. src/unistd/sync.c is unmodified -- only the number needed remapping. See
+ * modules/oxfs/src/lib.rs's oxfs_sync: force-commits every currently-open write buffer to its
+ * inode, the sync()-wide counterpart of fsync's single-fd version. */
+#define __NR_sync					472
 #define __NR_acct					163
 #define __NR_settimeofday			164
 /* Real mount(2)'s wire format is (special, dir, fstype, flags, data) -- five conceptual args,
@@ -544,7 +650,16 @@
 #define __NR_umount2				166
 #define __NR_swapon					167
 #define __NR_swapoff				168
-#define __NR_reboot					169
+/* OxideBSD's own invention (486) -- see flock's own comment (up near fsync) for why this
+ * whole batch is uniformly renumbered rather than kept at each syscall's own real (here, actually
+ * free) value. src/linux/reboot.c is unmodified -- real reboot(int type) already fits this ABI's
+ * 4-register width whole (the two magic numbers plus type), so only the number needed remapping,
+ * no call-site patch. See src/process.rs's do_reboot: matches real RB_AUTOBOOT/RB_HALT_SYSTEM/
+ * RB_POWER_OFF magic values against src/reboot.rs's real 8042-pulse reset / a real QEMU ACPI
+ * shutdown (out 0x604, 0x2000) / a plain permanent hlt_loop(), respectively. No permission check
+ * -- this kernel has no capability model to gate CAP_SYS_BOOT against, the same "collapses to
+ * always-allowed" reasoning already accepted for do_setpgid/TIOCSCTTY's own force flag. */
+#define __NR_reboot					486
 #define __NR_sethostname			170
 #define __NR_setdomainname			171
 #define __NR_iopl					172
@@ -724,7 +839,14 @@
 #define __NR_signalfd				282
 #define __NR_timerfd_create			283
 #define __NR_eventfd				284
-#define __NR_fallocate				285
+/* OxideBSD's own invention (474) -- see flock's own comment (up near fsync) for why this
+ * whole batch is uniformly renumbered rather than kept at each syscall's own real (here, actually
+ * free) value. src/linux/fallocate.c is unmodified -- real fallocate(fd, mode, base, len) already
+ * fits this ABI's 4-register width whole (off_t is already 64-bit on this arch, no
+ * __SYSCALL_LL_E splitting needed), so only the number needed remapping. See modules/oxfs/
+ * src/lib.rs's oxfs_fallocate: zero-extends the file to offset+len if currently shorter, otherwise
+ * a no-op -- FALLOC_FL_KEEP_SIZE and every other mode flag are ignored, a known simplification. */
+#define __NR_fallocate				474
 #define __NR_timerfd_settime		286
 #define __NR_timerfd_gettime		287
 #define __NR_accept4				288
@@ -741,7 +863,18 @@
 #define __NR_recvmmsg				299
 #define __NR_fanotify_init			300
 #define __NR_fanotify_mark			301
-#define __NR_prlimit64				302
+/* OxideBSD's own invention (478) -- see flock's own comment (up near fsync) for the full
+ * story on why this whole batch landed at 471-486. src/misc/getrlimit.c/setrlimit.c both call this
+ * unconditionally as their real first attempt (see getrlimit/setrlimit's own comments
+ * above for why their own legacy syscalls stay dead code once this succeeds) -- only the number
+ * needed remapping, real prlimit64(pid, resource, new_ptr, old_ptr) already fits this ABI's
+ * 4-register width whole. See src/process.rs's do_prlimit64: a real per-process
+ * Process::rlimits: [(u64, u64); 16] array (RLIM_INFINITY = u64::MAX default), self-only (pid == 0
+ * or the caller's own pid; any other target is ESRCH -- no current applet needs cross-process
+ * rlimit access), writes back the old value before applying a new one. No real enforcement of any
+ * limit -- an honest, documented gap, the same tier as several other accepted-but-unenforced
+ * fields already in this codebase (e.g. O_NONBLOCK on a TCP socket). */
+#define __NR_prlimit64				478
 #define __NR_name_to_handle_at			303
 #define __NR_open_by_handle_at			304
 #define __NR_clock_adjtime			305
