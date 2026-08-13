@@ -128,6 +128,10 @@
  * SYS_GETPID=20, so printf() silently called getpid() instead of ever writing anything, no
  * crash, just no output at all. See src/syscall.rs's sys_writev in the OxideBSD tree. */
 #define __NR_writev				104
+/* Left at its real, inert Linux value -- nothing else in this ABI claims 21 (confirmed by grep
+ * across every registered syscall number in the OxideBSD tree), so no remap was needed, only the
+ * (path, amode) -> (path_ptr, path_len, amode) argument-convention patch in src/unistd/access.c.
+ * See modules/oxfs/src/lib.rs's oxfs_access in the OxideBSD tree for the kernel-side handler. */
 #define __NR_access				21
 /* OxideBSD's own invention -- but matches real pipe(2)'s exact wire format (a single pointer to
  * int pipefd[2]), so remapping the number alone was enough; no argument-convention patch needed
