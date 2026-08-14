@@ -580,11 +580,14 @@
 #define __NR_personality		135
 #define __NR_ustat				136
 /* OxideBSD's own invention (476) -- real x86_64 Linux's own value (137) is already independently
- * claimed by this ABI's own SYS_UNAME. src/stat/statvfs.c's __statfs is unmodified (no
- * SYS_statfs64 exists for x86_64, so it already calls this plain macro) -- only the number needed
- * remapping. See modules/oxfs/src/lib.rs's oxfs_statfs: a real struct statfs built from this
- * filesystem's own live NUM_BLOCKS/BLOCK_USED/MAX_INODES/INODES counts (separately for the real
- * vs. tmpfs pool), backing df's real statvfs(3) call. */
+ * claimed by this ABI's own SYS_UNAME. Unlike the fstatfs entry right below, statfs itself
+ * DOES need its own argument-convention patch (see src/stat/statvfs.c's own doc comment) -- a real
+ * bug found live: passing the plain real-Linux 2-arg (path, buf) shape straight through the
+ * remapped number crashed df/statfs with a page fault, since oxfs_statfs expects a length-prefixed
+ * (path_ptr, path_len, buf_ptr) like open()/chdir()/mkdir()/etc. already get. See
+ * modules/oxfs/src/lib.rs's oxfs_statfs: a real struct statfs built from this filesystem's own
+ * live NUM_BLOCKS/BLOCK_USED/MAX_INODES/INODES counts (separately for the real vs. tmpfs pool),
+ * backing df's real statvfs(3) call. */
 #define __NR_statfs				476
 /* OxideBSD's own invention (477) -- real x86_64 Linux's own value (138) is already independently
  * claimed by this ABI's own SYS_CLOCK_GETTIME. src/stat/statvfs.c's __fstatfs is unmodified --
