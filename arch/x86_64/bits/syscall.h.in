@@ -75,7 +75,14 @@
  * every mapping unconditionally behaves as anonymous+private, the only case this kernel needs to
  * support for musl's allocator. See src/process.rs's mmap handler in the OxideBSD tree. */
 #define __NR_mmap				100
-#define __NR_mprotect			10
+/* Remapped to OxideBSD's own invented SYS_MPROTECT (492, continuing the ABI's own numbering past
+ * its then-highest assigned number rather than reusing real Linux's inert-until-now 10 -- see
+ * src/process.rs's do_mprotect in the OxideBSD tree, a permissive no-op-success stub, and
+ * src/syscall.rs's module doc comment for why this ABI never reuses real Linux/BSD numbers for its
+ * own inventions). Found live: real PT_INTERP dynamic linking reaches this for the first time via
+ * ldso/dlstart.c's own RELRO-protection mprotect(2) call -- unreachable, and so never remapped,
+ * before any dynamic linking existed to call it. */
+#define __NR_mprotect			492
 #define __NR_munmap				101
 #define __NR_brk				102
 /* OxideBSD's own invention (117), but matches real rt_sigaction(2)'s exact wire format --
