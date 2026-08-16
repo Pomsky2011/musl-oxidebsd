@@ -151,9 +151,19 @@
 #define __NR_msync				26
 #define __NR_mincore			27
 #define __NR_madvise			28
-#define __NR_shmget				29
-#define __NR_shmat				30
-#define __NR_shmctl				31
+/* Pre-reserved ahead of implementation: OxideBSD's own invented SYS_SHMGET (542, first of a
+ * four-slot SysV shm sub-batch -- see the semget/semop/semctl/shmdt/msgget/msgsnd/msgrcv/msgctl
+ * block further down this file for the rest of SysV IPC, and docs/MISSING_POSIX_SYSCALLS.md for
+ * why this whole family is last in the planned-implementation order: no live caller in the current
+ * roster, and ipcrm/ipcs were already cut from the BusyBox roster before v0.1 specifically because
+ * this subsystem doesn't exist yet). Left at its real, unremapped value (29) this was already
+ * confirmed unclaimed; claiming a permanent OxideBSD-space slot ahead of time instead, same
+ * reasoning as SYS_GETRANDOM above. No kernel-side handler is registered yet. */
+#define __NR_shmget				542
+/* SysV shm sub-batch, slot 2 of 4 -- see SYS_SHMGET's own comment just above. */
+#define __NR_shmat				543
+/* SysV shm sub-batch, slot 3 of 4 -- see SYS_SHMGET's own comment just above. */
+#define __NR_shmctl				544
 /* OxideBSD's own invention (125), continuing the sequence right past ioctl (124). Matches real
  * dup(2)'s exact single-argument (oldfd) wire format, same story as dup2 below. Added once
  * CONFIG_HUSH_JOB turned out to need it (hush's own dup_CLOEXEC helper falls back to plain dup()
@@ -164,7 +174,15 @@
 /* OxideBSD's own invention -- matches real dup2(2)'s exact (oldfd, newfd) wire format, same story
  * as the pipe entry above. See src/syscall.rs's sys_dup2 / src/fd.rs's dup2 in the OxideBSD tree. */
 #define __NR_dup2				106
-#define __NR_pause				34
+/* Pre-reserved ahead of implementation: OxideBSD's own invented SYS_PAUSE (529, slot 3 in the same
+ * planned-implementation-order batch as SYS_GETRANDOM=526 above -- see
+ * docs/MISSING_POSIX_SYSCALLS.md). No direct musl .c call site found (likely inlined/aliased) and
+ * no confirmed live path in the current roster, but cheap once real signal-wait blocking exists --
+ * a thin wrapper reusing whatever primitive SYS_SIGSUSPEND ends up needing. Left at its real,
+ * unremapped value (34) this was already confirmed unclaimed; claiming a permanent OxideBSD-space
+ * slot ahead of time instead, same reasoning as SYS_GETRANDOM above. No kernel-side handler is
+ * registered yet. */
+#define __NR_pause				529
 /* OxideBSD's own invention (139, continuing right past SYS_CLOCK_GETTIME = 138). Matches real
  * nanosleep(2)'s exact (req_ptr, rem_ptr) wire format -- musl's own nanosleep(), calling through
  * __clock_nanosleep(CLOCK_REALTIME, 0, req, rem), reduces to exactly this shape whenever
@@ -307,14 +325,36 @@
  * strlen needed), so no argument-convention patch was needed beyond this number remap. See
  * src/syscall.rs's sys_uname in the OxideBSD tree. */
 #define __NR_uname				137
-#define __NR_semget				64
-#define __NR_semop				65
-#define __NR_semctl				66
-#define __NR_shmdt				67
-#define __NR_msgget				68
-#define __NR_msgsnd				69
-#define __NR_msgrcv				70
-#define __NR_msgctl				71
+/* Pre-reserved ahead of implementation: OxideBSD's own invented SYS_SEMGET (546, first of a
+ * four-slot SysV sem sub-batch, continuing right past the SysV shm sub-batch (SYS_SHMGET=542..
+ * SYS_SHMCTL=544, see that block's own comment) and SYS_SHMDT (545, just below) -- see
+ * docs/MISSING_POSIX_SYSCALLS.md for why the whole SysV IPC family is last in the planned
+ * implementation order. Left at its real, unremapped value (64) this was already confirmed
+ * unclaimed; claiming a permanent OxideBSD-space slot ahead of time instead, same reasoning as
+ * SYS_GETRANDOM above. No kernel-side handler is registered yet. */
+#define __NR_semget				546
+/* SysV sem sub-batch, slot 2 of 4 -- see SYS_SEMGET's own comment just above. */
+#define __NR_semop				547
+/* SysV sem sub-batch, slot 3 of 4 -- see SYS_SEMGET's own comment just above. */
+#define __NR_semctl				548
+/* SysV shm sub-batch, slot 4 of 4 -- see SYS_SHMGET's own comment (near __NR_shmget=542, further
+ * up this file) for the rest of the shm sub-batch. Left at its real, unremapped value (67) this
+ * was already confirmed unclaimed; claiming a permanent OxideBSD-space slot ahead of time instead.
+ * No kernel-side handler is registered yet. */
+#define __NR_shmdt				545
+/* Pre-reserved ahead of implementation: OxideBSD's own invented SYS_MSGGET (550, first of a
+ * four-slot SysV msg sub-batch, continuing right past the SysV sem sub-batch (SYS_SEMGET=546..
+ * SYS_SEMCTL=548) and SYS_SEMTIMEDOP (549, see its own remap further down this file) -- same SysV
+ * IPC family, see SYS_SEMGET's own comment above for why it's last in priority. Left at its real,
+ * unremapped value (68) this was already confirmed unclaimed; claiming a permanent OxideBSD-space
+ * slot ahead of time instead. No kernel-side handler is registered yet. */
+#define __NR_msgget				550
+/* SysV msg sub-batch, slot 2 of 4 -- see SYS_MSGGET's own comment just above. */
+#define __NR_msgsnd				551
+/* SysV msg sub-batch, slot 3 of 4 -- see SYS_MSGGET's own comment just above. */
+#define __NR_msgrcv				552
+/* SysV msg sub-batch, slot 4 of 4 -- see SYS_MSGGET's own comment just above. */
+#define __NR_msgctl				553
 /* OxideBSD's own invention (151). musl's fcntl() wrapper (src/fcntl/fcntl.c) is variadic in C but
  * always resolves to a plain 3-argument syscall(SYS_fcntl, fd, cmd, arg) for every command this
  * kernel implements (F_GETFL/F_SETFL/F_SETFD/F_DUPFD/F_DUPFD_CLOEXEC) -- already only 3 arguments,
@@ -475,7 +515,17 @@
  * rusage_ptr 4th argument, which needed no call-site patch here at all: src/linux/wait4.c already
  * issues a real 4-argument raw syscall with a bare pointer). */
 #define __NR_getrusage			491
-#define __NR_sysinfo			99
+/* Pre-reserved ahead of implementation: OxideBSD's own invented SYS_SYSINFO (527, continuing the
+ * ABI's own numbering sequence past its then-highest assigned number, 526 -- see the numbering
+ * discipline in docs/MISSING_POSIX_SYSCALLS.md). sysinfo(2) isn't POSIX but is the confirmed live
+ * blocker for BusyBox's free/uptime primary numbers (procps/{free,uptime}.c). Left at its real,
+ * unremapped value (99) this was already confirmed unclaimed by anything in this ABI -- this
+ * remap isn't fixing a collision, it's claiming a permanent slot in OxideBSD's own invented-number
+ * space ahead of time (per project decision: this ABI deliberately doesn't borrow real Linux
+ * numbers for syscalls it plans to implement itself, even when the real number is already safe),
+ * so a future implementation pass never needs to touch this file again. No kernel-side handler is
+ * registered yet. */
+#define __NR_sysinfo			527
 /* Remapped off its real, unremapped Linux value (100) -- that number was independently claimed by
  * this ABI's own invented SYS_MMAP=100 (see the mmap/munmap/brk/set_fs_base/writev remap block
  * earlier in this file) without checking this macro first, the same class of bug SYS_KILL's own
@@ -586,8 +636,23 @@
 #define __NR_rt_sigpending		494
 #define __NR_rt_sigtimedwait	495
 #define __NR_rt_sigqueueinfo	496
-#define __NR_rt_sigsuspend		130
-#define __NR_sigaltstack		131
+/* Pre-reserved ahead of implementation: OxideBSD's own invented SYS_SIGSUSPEND (530, slot 4 in the
+ * same planned-implementation-order batch as SYS_GETRANDOM=526 above -- see
+ * docs/MISSING_POSIX_SYSCALLS.md). sigsuspend(2) needs a real block/wake primitive tied to signal
+ * delivery, not just a number -- lowest priority of the signal-family trio here since it's the
+ * only one of the three needing a genuinely new primitive rather than a state field. Left at its
+ * real, unremapped value (130) this was already confirmed unclaimed; this remap claims a
+ * permanent slot in OxideBSD's own number space ahead of time instead. No kernel-side handler is
+ * registered yet. */
+#define __NR_rt_sigsuspend		530
+/* Pre-reserved ahead of implementation: OxideBSD's own invented SYS_SIGALTSTACK (528, slot 2 in
+ * the same batch). Needs one small `Process` state addition (an alternate-stack pointer/size/flags
+ * triple) -- modules/signal/'s own scope note already documents "no real signal stack" as a known
+ * gap; a real sigaltstack doesn't fix that nesting gap by itself but is a real, cheap step. Left
+ * at its real, unremapped value (131) this was already confirmed unclaimed; claiming a permanent
+ * OxideBSD-space slot ahead of time instead, same reasoning as SYS_GETRANDOM above. No kernel-side
+ * handler is registered yet. */
+#define __NR_sigaltstack		528
 #define __NR_utime				132
 /* OxideBSD's own invention (489) -- see SYS_link's own comment above (near SYS_creat) for the
  * full story on why this small batch landed at 488-490. Real device-node creation now exists
@@ -821,13 +886,32 @@
  * without real pthread_create-spawned threads). */
 #define __NR_set_tid_address		150
 #define __NR_restart_syscall		219
-#define __NR_semtimedop				220
+/* SysV sem sub-batch's 4th member, folded in here rather than with SYS_SEMGET/SYS_SEMOP/SYS_SEMCTL
+ * (near __NR_semget=546, further up this file) since it's a distinct real macro at a distant
+ * original offset -- OxideBSD's own invented SYS_SEMTIMEDOP (549). Left at its real, unremapped
+ * value (220) this was already confirmed unclaimed; claiming a permanent OxideBSD-space slot ahead
+ * of time instead, same reasoning as SYS_GETRANDOM above (near __NR_getrandom, further down this
+ * file). No kernel-side handler is registered yet. */
+#define __NR_semtimedop				549
 #define __NR_fadvise64				221
-#define __NR_timer_create			222
-#define __NR_timer_settime			223
-#define __NR_timer_gettime			224
-#define __NR_timer_getoverrun		225
-#define __NR_timer_delete			226
+/* Pre-reserved ahead of implementation: OxideBSD's own invented SYS_TIMER_CREATE (531, first of a
+ * five-slot POSIX per-process-timer sub-batch, continuing right past the signal-family trio
+ * (SYS_SIGALTSTACK=528..SYS_SIGSUSPEND=530, see docs/MISSING_POSIX_SYSCALLS.md) in the planned
+ * implementation order. Distinct from the already-implemented setitimer/getitimer (ITIMER_REAL
+ * only) -- a natural extension of that existing itimer infrastructure once per-timer-id tracking
+ * exists. No live caller confirmed in the current roster (timer_delete.c does call tkill
+ * internally, but only after a real timer_create has ever succeeded, which can't happen yet).
+ * Left at its real, unremapped value (222) this was already confirmed unclaimed; claiming a
+ * permanent OxideBSD-space slot ahead of time instead. No kernel-side handler is registered yet. */
+#define __NR_timer_create			531
+/* POSIX timer sub-batch, slot 2 of 5 -- see SYS_TIMER_CREATE's own comment just above. */
+#define __NR_timer_settime			532
+/* POSIX timer sub-batch, slot 3 of 5 -- see SYS_TIMER_CREATE's own comment just above. */
+#define __NR_timer_gettime			533
+/* POSIX timer sub-batch, slot 4 of 5 -- see SYS_TIMER_CREATE's own comment just above. */
+#define __NR_timer_getoverrun		534
+/* POSIX timer sub-batch, slot 5 of 5 -- see SYS_TIMER_CREATE's own comment just above. */
+#define __NR_timer_delete			535
 #define __NR_clock_settime			227
 /* OxideBSD's own invention (138, continuing right past SYS_UNAME = 137). Matches real
  * clock_gettime(2)'s exact (clockid, timespec_ptr) wire format, so no argument-convention patch
@@ -848,12 +932,25 @@
 #define __NR_mbind					237
 #define __NR_set_mempolicy			238
 #define __NR_get_mempolicy			239
-#define __NR_mq_open				240
-#define __NR_mq_unlink				241
-#define __NR_mq_timedsend			242
-#define __NR_mq_timedreceive		243
-#define __NR_mq_notify				244
-#define __NR_mq_getsetattr			245
+/* Pre-reserved ahead of implementation: OxideBSD's own invented SYS_MQ_OPEN (536, first of a
+ * six-slot POSIX message-queue sub-batch, continuing right past the per-process-timer sub-batch
+ * (SYS_TIMER_CREATE=531..SYS_TIMER_DELETE=535, see that block's own comment) in the planned
+ * implementation order -- see docs/MISSING_POSIX_SYSCALLS.md. No live caller confirmed in the
+ * current roster; src/fs/pipe.rs's existing blocking-buffer machinery (already reused for
+ * socketpair) is the natural backing whenever this gets built. Left at its real, unremapped value
+ * (240) this was already confirmed unclaimed; claiming a permanent OxideBSD-space slot ahead of
+ * time instead, same reasoning as SYS_GETRANDOM above. No kernel-side handler is registered yet. */
+#define __NR_mq_open				536
+/* POSIX mq sub-batch, slot 2 of 6 -- see SYS_MQ_OPEN's own comment just above. */
+#define __NR_mq_unlink				537
+/* POSIX mq sub-batch, slot 3 of 6 -- see SYS_MQ_OPEN's own comment just above. */
+#define __NR_mq_timedsend			538
+/* POSIX mq sub-batch, slot 4 of 6 -- see SYS_MQ_OPEN's own comment just above. */
+#define __NR_mq_timedreceive		539
+/* POSIX mq sub-batch, slot 5 of 6 -- see SYS_MQ_OPEN's own comment just above. */
+#define __NR_mq_notify				540
+/* POSIX mq sub-batch, slot 6 of 6 -- see SYS_MQ_OPEN's own comment just above. */
+#define __NR_mq_getsetattr			541
 #define __NR_kexec_load				246
 #define __NR_waitid					247
 #define __NR_add_key				248
@@ -954,7 +1051,17 @@
 #define __NR_sched_getattr			315
 #define __NR_renameat2				316
 #define __NR_seccomp				317
-#define __NR_getrandom				318
+/* Pre-reserved ahead of implementation: OxideBSD's own invented SYS_GETRANDOM (526, the first slot
+ * in a planned-implementation-order batch of syscalls this ABI is claiming numbers for ahead of
+ * building them -- see docs/MISSING_POSIX_SYSCALLS.md's "no live caller yet" table and the
+ * numbering discipline there). Only reachable via getentropy()/BusyBox's seedrng applet (which
+ * doesn't even build here today), but the natural first target since src/random.rs's real
+ * SHA-256-seeded ChaCha20 generator (already backing /dev/urandom) is a near-direct backing.
+ * Left at its real, unremapped value (318) this was already confirmed unclaimed -- this remap
+ * isn't fixing a collision, it's this ABI deliberately not borrowing a real Linux number for a
+ * syscall it plans to implement itself, so no further musl-side change is needed once it is. No
+ * kernel-side handler is registered yet. */
+#define __NR_getrandom				526
 #define __NR_memfd_create			319
 #define __NR_kexec_file_load			320
 #define __NR_bpf				321
