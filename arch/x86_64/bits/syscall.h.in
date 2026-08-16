@@ -337,8 +337,8 @@
 #define __NR_semop				547
 /* SysV sem sub-batch, slot 3 of 4 -- see SYS_SEMGET's own comment just above. */
 #define __NR_semctl				548
-/* SysV shm sub-batch, slot 4 of 4 -- see SYS_SHMGET's own comment (near __NR_shmget=542, further
- * up this file) for the rest of the shm sub-batch. Left at its real, unremapped value (67) this
+/* SysV shm sub-batch, slot 4 of 4 -- see SYS_SHMGET's own comment (SYS_SHMGET=542, further up
+ * this file) for the rest of the shm sub-batch. Left at its real, unremapped value (67) this
  * was already confirmed unclaimed; claiming a permanent OxideBSD-space slot ahead of time instead.
  * No kernel-side handler is registered yet. */
 #define __NR_shmdt				545
@@ -887,11 +887,11 @@
 #define __NR_set_tid_address		150
 #define __NR_restart_syscall		219
 /* SysV sem sub-batch's 4th member, folded in here rather than with SYS_SEMGET/SYS_SEMOP/SYS_SEMCTL
- * (near __NR_semget=546, further up this file) since it's a distinct real macro at a distant
- * original offset -- OxideBSD's own invented SYS_SEMTIMEDOP (549). Left at its real, unremapped
- * value (220) this was already confirmed unclaimed; claiming a permanent OxideBSD-space slot ahead
- * of time instead, same reasoning as SYS_GETRANDOM above (near __NR_getrandom, further down this
- * file). No kernel-side handler is registered yet. */
+ * (SYS_SEMGET=546, further up this file) since it's a distinct real macro at a distant original
+ * offset -- OxideBSD's own invented SYS_SEMTIMEDOP (549). Left at its real, unremapped value (220)
+ * this was already confirmed unclaimed; claiming a permanent OxideBSD-space slot ahead of time
+ * instead, same reasoning as SYS_GETRANDOM above (SYS_GETRANDOM=526, further down this file). No
+ * kernel-side handler is registered yet. */
 #define __NR_semtimedop				549
 #define __NR_fadvise64				221
 /* Pre-reserved ahead of implementation: OxideBSD's own invented SYS_TIMER_CREATE (531, first of a
