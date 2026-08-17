@@ -19,6 +19,12 @@ int mq_timedsend(mqd_t mqd, const char *msg, size_t len, unsigned prio, const st
 	return syscall_cp(SYS_mq_timedsend, mqd, msg, len, prio,
 		at ? ((long[]){CLAMP(s), ns}) : 0);
 #else
-	return syscall_cp(SYS_mq_timedsend, mqd, msg, len, prio, at);
+	/* OxideBSD's own native ABI carries only 4 register-width syscall args (RDI/RSI/RDX/R10 --
+	 * see arch/x86_64/syscall_arch.h and src/syscall/mod.rs's own doc comment), one short of
+	 * the 5 real Linux mq_timedsend(2) needs. mqd (a small fd-like int) and len (bounded well
+	 * under 2^32 by this port's own mq_msgsize cap -- see docs/MISSING_POSIX_SYSCALLS.md's mq
+	 * sub-batch notes) are packed into a single register instead of dropped: high 32 bits =
+	 * len, low 32 bits = mqd. */
+	return syscall_cp(SYS_mq_timedsend, (long)(unsigned)mqd | ((long)len << 32), msg, prio, at);
 #endif
 }

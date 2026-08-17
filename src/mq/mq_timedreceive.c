@@ -19,6 +19,9 @@ ssize_t mq_timedreceive(mqd_t mqd, char *restrict msg, size_t len, unsigned *res
 	return syscall_cp(SYS_mq_timedreceive, mqd, msg, len, prio,
 		at ? ((long[]){CLAMP(s), ns}) : 0);
 #else
-	return syscall_cp(SYS_mq_timedreceive, mqd, msg, len, prio, at);
+	/* Same 4-register-arg packing as mq_timedsend.c's own patch -- see that file's comment.
+	 * `prio` here is the real `unsigned *` out-param (not a plain value like mq_timedsend's),
+	 * so only mqd/len get packed; prio's pointer and `at` still fill the remaining two slots. */
+	return syscall_cp(SYS_mq_timedreceive, (long)(unsigned)mqd | ((long)len << 32), msg, prio, at);
 #endif
 }
