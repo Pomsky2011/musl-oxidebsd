@@ -62,18 +62,20 @@
  * per-socket receive-queue readiness across udp/tcp/icmp. */
 #define __NR_poll				148
 #define __NR_lseek				8
-/* OxideBSD's own invented mmap. musl's mmap() wrapper always calls __syscall6(SYS_mmap, addr,
- * len, prot, flags, fd, off) -- OxideBSD's ABI only wires 3 argument registers through to a
- * handler (RDI/RSI/RDX; see src/syscall.rs's module doc comment), so only the first three of
- * musl's six ever arrive: addr (RDI, a hint -- ignored, OxideBSD always picks the address),
- * len (RSI, the one argument that actually matters), and prot (RDX, ignored -- every mapped page
- * is unconditionally PRESENT|WRITABLE|USER_ACCESSIBLE, the same "every page WRITABLE regardless"
- * simplification src/module.rs's own loader already uses). fd/off (R8/R9) are entirely unreadable
- * at this ABI's 4-argument width; flags (R10) is technically readable now (unlike when this
- * comment was first written -- R10 became a real argument once SYS_execve needed one, see
- * src/syscall.rs's module doc comment) but mmap's own registered handler still doesn't read it --
- * every mapping unconditionally behaves as anonymous+private, the only case this kernel needs to
- * support for musl's allocator. See src/process.rs's mmap handler in the OxideBSD tree. */
+/* OxideBSD's own invented mmap. Real mmap(2) needs 6 args (addr, len, prot, flags, fd, off), but
+ * OxideBSD's ABI only wires 4 argument registers through to a handler (RDI/RSI/RDX/R10; see
+ * src/syscall.rs's module doc comment) -- addr (RDI, a hint, still ignored -- OxideBSD always
+ * picks the address itself) and prot (RDX) occupy their usual positions, but this file's own
+ * src/mman/mmap.c is patched to pack real fd/off into R10 instead of forwarding musl's real
+ * 4th/5th/6th args unmodified: flags is dropped entirely (OxideBSD's own SYS_MMAP distinguishes
+ * anonymous vs. real fd-backed MAP_SHARED purely by fd == -1 vs. fd >= 0, matching musl's own
+ * MAP_ANON-implies-fd==-1 convention), fd goes in R10's low 32 bits (so -1 survives as the
+ * recognizable 0xffff_ffff bit pattern), off in the high 32 bits (kernel-side requires 0 -- a
+ * nonzero value is an honest EINVAL, see OxideBSD's own process::mm::do_mmap_file_backed doc
+ * comment for why). fd == -1: the original anonymous+private, always-zero-filled behavior,
+ * unchanged. fd >= 0: real fd-backed MAP_SHARED, content-populated from the real file and shared
+ * (same physical frames) across every mmap of the same underlying file. See src/process/mm.rs's
+ * do_mmap/do_mmap_file_backed in the OxideBSD tree. */
 #define __NR_mmap				100
 /* Remapped to OxideBSD's own invented SYS_MPROTECT (492, continuing the ABI's own numbering past
  * its then-highest assigned number rather than reusing real Linux's inert-until-now 10 -- see
