@@ -386,14 +386,18 @@ static inline long __alt_socketcall(int sys, int sock, int cp, syscall_arg_t a, 
  * oxfs_open then built a slice covering hundreds of KB starting at the real filename pointer and
  * walked off the end of its own mapped region. Fixed the same way src/fcntl/open.c's own patch
  * already was: compute path_len via a real strlen (the caller always gives a NUL-terminated C
- * string here too) and drop mode/O_LARGEFILE-oring, matching OxideBSD's own (path_ptr, path_len,
- * flags) shape instead. `__builtin_strlen` (a compiler builtin, not a declared libc function) is
- * used specifically so this macro doesn't depend on every expansion site already having
- * <string.h> included. */
+ * string here too), matching OxideBSD's own (path_ptr, path_len, flags, mode) shape instead.
+ * `__builtin_strlen` (a compiler builtin, not a declared libc function) is used specifically so
+ * this macro doesn't depend on every expansion site already having <string.h> included.
+ *
+ * `mo` (real requested creation mode) used to be dropped outright here too, same real bug
+ * src/fcntl/open.c's own doc comment documents fixing on the public open(2) path -- fopen()'s own
+ * `sys_open(filename, flags, 0666)` call needs it threaded through for the same reason. Passed as
+ * a real 4th syscall argument via __syscall4/__syscall_cp4 instead of __syscall3/__syscall_cp3. */
 #define __sys_open2(x,pn,fl) __syscall3(SYS_open, pn, __builtin_strlen(pn), (fl))
-#define __sys_open3(x,pn,fl,mo) __syscall3(SYS_open, pn, __builtin_strlen(pn), (fl))
+#define __sys_open3(x,pn,fl,mo) __syscall4(SYS_open, pn, __builtin_strlen(pn), (fl), (mo))
 #define __sys_open_cp2(x,pn,fl) __syscall_cp3(SYS_open, pn, __builtin_strlen(pn), (fl))
-#define __sys_open_cp3(x,pn,fl,mo) __syscall_cp3(SYS_open, pn, __builtin_strlen(pn), (fl))
+#define __sys_open_cp3(x,pn,fl,mo) __syscall_cp4(SYS_open, pn, __builtin_strlen(pn), (fl), (mo))
 #else
 #define __sys_open2(x,pn,fl) __syscall3(SYS_openat, AT_FDCWD, pn, (fl)|O_LARGEFILE)
 #define __sys_open3(x,pn,fl,mo) __syscall4(SYS_openat, AT_FDCWD, pn, (fl)|O_LARGEFILE, mo)
