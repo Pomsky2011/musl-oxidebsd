@@ -697,6 +697,12 @@
  * needed remapping. See getpriority's own comment just above for the real (stored, not
  * enforced) semantics this backs. */
 #define __NR_setpriority			479
+/* OxideBSD's own invention (507) -- real x86_64 Linux's own value (142) is already independently
+ * claimed by this ABI's own SYS_SENDTO. src/sched/sched_setparam.c was un-stubbed from its
+ * previous permanent ENOSYS to a real syscall(SYS_sched_setparam, pid, param) call -- only the
+ * number needed remapping, the wire format is unchanged. See src/process.rs's
+ * do_sched_setparam: validates/stores Process::sched_priority against the target's own current
+ * Process::sched_policy range, no real RT scheduling effect. */
 #define __NR_sched_setparam			507
 /* OxideBSD's own invention (483) -- real x86_64 Linux's own value (143) is already independently
  * claimed by this ABI's own SYS_RECVFROM. util-linux/chrt.c calls this macro directly via a raw
