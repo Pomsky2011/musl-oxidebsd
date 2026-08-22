@@ -469,8 +469,22 @@
  * issues a real 4-argument raw syscall with a bare pointer). */
 #define __NR_getrusage			491
 #define __NR_sysinfo			99
-#define __NR_times				100
-#define __NR_ptrace				101
+/* Remapped off its real, unremapped Linux value (100) -- that number was independently claimed by
+ * this ABI's own invented SYS_MMAP=100 (see the mmap/munmap/brk/set_fs_base/writev remap block
+ * earlier in this file) without checking this macro first, the same class of bug SYS_KILL's own
+ * collision with real setgroups already burned this project on once. times(2) has a real, live
+ * caller (src/time/times.c, unmodified -- reachable from hush's own `times` shell builtin) that
+ * would otherwise have silently invoked the mmap handler with mismatched arguments instead of a
+ * clean ENOSYS. No kernel-side handler is registered for this new number -- a real times(2)
+ * implementation is still unimplemented, this fix only restores a clean ENOSYS instead of a
+ * silent misroute. Ported from master's own identical fix (musl commit 65ec6c07, a full
+ * cross-reference sweep of every real macro value in this file against every one of this ABI's own
+ * invented numbers, done well after this branch's own musl pin) -- a pure safety fix (silent
+ * misroute -> clean ENOSYS for all 33 macros this sweep touches), not new functionality, so it
+ * applies here unchanged regardless of which specific ones this branch's own smaller roster
+ * currently has a live caller for. */
+#define __NR_times				493
+#define __NR_ptrace				497
 /* OxideBSD's own invention (158), continuing the sequence right past SYS_GETITIMER (157). Real
  * zero-argument getuid(2) -- no argument-convention patch needed, only the number. Left at its
  * original value (102) this silently collides with OxideBSD's own real brk (see SYS_BRK's own
@@ -518,7 +532,7 @@
  * the same time as the getcwd remap above -- hush reads $PPID at startup via getppid(). See
  * src/process.rs's do_getppid / modules/native_abi/src/lib.rs in the OxideBSD tree. */
 #define __NR_getppid			107
-#define __NR_getpgrp			111
+#define __NR_getpgrp			498
 #define __NR_setsid				112
 #define __NR_setreuid			113
 #define __NR_setregid			114
@@ -546,10 +560,21 @@
  * way documented elsewhere for the mount syscalls' own comments.) */
 #define __NR_getgroups			164
 #define __NR_setgroups			178
-#define __NR_setresuid			117
-#define __NR_getresuid			118
-#define __NR_setresgid			119
-#define __NR_getresgid			120
+/* All four remapped off their real, unremapped Linux values (117/118/119/120) -- independently
+ * claimed by this ABI's own SYS_SIGACTION=117/SYS_SIGPROCMASK=118/SYS_SIGRETURN=119/
+ * SYS_SETPGID=120 without checking these macros first. `setresgid` colliding with `SYS_SIGRETURN`
+ * is the worst of the four: a real call would have restored raw CPU state from whatever garbage
+ * sat at the signal-frame-shaped location its arguments happened to describe, not just a mismatched
+ * argument count. Not triggered by this codebase's own `su`/`login` (`change_identity()` calls
+ * plain `setgid()`/`setuid()`, each already on its own safely-remapped number, not these) -- but a
+ * real landmine for any user-compiled C program (this branch has a real on-target `tcc`) calling
+ * `setresuid`/`setresgid` directly. No kernel-side handler registered for any of these four new
+ * numbers -- ported from master's own identical fix (musl commit 65ec6c07), see the `times(2)` remap's own
+ * comment above for the full context. */
+#define __NR_setresuid			499
+#define __NR_getresuid			500
+#define __NR_setresgid			501
+#define __NR_getresgid			502
 /* Needs no remap at all -- Linux's own original value for getpgid already happens to be exactly
  * the number OxideBSD's own invented sequence would have assigned it next (121, right past
  * setpgid's own 120 above). Matches real getpgid(2)'s exact (pid) wire format regardless -- see
@@ -558,11 +583,19 @@
 #define __NR_setfsuid			122
 #define __NR_setfsgid			123
 #define __NR_getsid				177
-#define __NR_capget				125
-#define __NR_capset				126
-#define __NR_rt_sigpending		127
-#define __NR_rt_sigtimedwait	128
-#define __NR_rt_sigqueueinfo	129
+#define __NR_capget				503
+#define __NR_capset				504
+/* All three remapped off their real, unremapped Linux values (127/128/129) -- independently
+ * claimed by this ABI's own SYS_STAT=127/SYS_LSTAT=128/SYS_GETDENTS=129 without checking these
+ * macros first, same bug class as the setresuid/getresuid/setresgid/getresgid block above.
+ * `sigpending(2)`/`sigtimedwait(2)`/`sigqueue(2)` have real, live callers in stock musl
+ * (src/signal/sigpending.c, sigtimedwait.c, sigqueue.c, all unmodified) that would otherwise have
+ * silently invoked stat/lstat/getdents with mismatched arguments instead of a clean ENOSYS. No
+ * kernel-side handler registered for any of these three new numbers -- ported from master's own
+ * identical fix, see the `times(2)` remap's own comment above for the full context. */
+#define __NR_rt_sigpending		494
+#define __NR_rt_sigtimedwait	495
+#define __NR_rt_sigqueueinfo	496
 #define __NR_rt_sigsuspend		130
 #define __NR_sigaltstack		131
 #define __NR_utime				132
@@ -578,7 +611,7 @@
 #define __NR_mknod				489
 #define __NR_uselib				134
 #define __NR_personality		135
-#define __NR_ustat				136
+#define __NR_ustat				505
 /* OxideBSD's own invention (476) -- real x86_64 Linux's own value (137) is already independently
  * claimed by this ABI's own SYS_UNAME. Unlike the fstatfs entry right below, statfs itself
  * DOES need its own argument-convention patch (see src/stat/statvfs.c's own doc comment) -- a real
@@ -594,7 +627,7 @@
  * only the number needed remapping. See modules/oxfs/src/lib.rs's oxfs_fstatfs, statfs's own
  * counterpart above. */
 #define __NR_fstatfs			477
-#define __NR_sysfs				139
+#define __NR_sysfs				506
 /* OxideBSD's own invention (480) -- real x86_64 Linux's own value (140) is already independently
  * claimed by this ABI's own SYS_SOCKET. src/misc/getpriority.c is unmodified (it un-shifts the
  * kernel's own 20-nice convention client-side) -- only the number needed remapping. See
@@ -607,7 +640,7 @@
  * needed remapping. See getpriority's own comment just above for the real (stored, not
  * enforced) semantics this backs. */
 #define __NR_setpriority			479
-#define __NR_sched_setparam			142
+#define __NR_sched_setparam			507
 /* OxideBSD's own invention (483) -- real x86_64 Linux's own value (143) is already independently
  * claimed by this ABI's own SYS_RECVFROM. util-linux/chrt.c calls this macro directly via a raw
  * syscall() (bypassing musl's own sched_getparam(), permanently stubbed to ENOSYS -- see
@@ -639,18 +672,29 @@
  * lives in the same file) is unmodified -- only the number needed remapping. See 
  * sched_get_priority_max's own comment just above. */
 #define __NR_sched_get_priority_min	485
-#define __NR_sched_rr_get_interval	148
-#define __NR_mlock					149
-#define __NR_munlock				150
-#define __NR_mlockall				151
-#define __NR_munlockall				152
-#define __NR_vhangup				153
-#define __NR_modify_ldt				154
-#define __NR_pivot_root				155
-#define __NR__sysctl				156
-#define __NR_prctl					157
-#define __NR_arch_prctl				158
-#define __NR_adjtimex				159
+/* This whole block (through the `adjtimex` remap below) remapped off real, unremapped Linux values
+ * (148-159) -- independently claimed by this ABI's own SYS_POLL=148/SYS_SET_TID_ADDRESS=150/...
+ * without checking these macros first. Worst of this block: real `munlock`'s own value (150)
+ * exactly equals this ABI's own invented `SYS_SET_TID_ADDRESS`, which every musl program issues at
+ * startup -- a real `munlock()` call would have silently misrouted into that handler instead of a
+ * clean ENOSYS. None of `mlock`/`munlock`/`mlockall`/`munlockall`/`sched_rr_get_interval`/
+ * `vhangup`/`modify_ldt`/`pivot_root`/`_sysctl`/`prctl`/`arch_prctl`/`adjtimex` has a kernel-side
+ * handler on this branch -- ported from master's own identical fix, see the `times(2)` remap's own comment
+ * above for the full context (musl commit 65ec6c07, redirected to fresh, verified-unclaimed
+ * numbers 493-525, a pure safety fix regardless of which of these this branch's own smaller
+ * roster currently has a live caller for). */
+#define __NR_sched_rr_get_interval	508
+#define __NR_mlock					509
+#define __NR_munlock				510
+#define __NR_mlockall				511
+#define __NR_munlockall				512
+#define __NR_vhangup				513
+#define __NR_modify_ldt				514
+#define __NR_pivot_root				525
+#define __NR__sysctl				515
+#define __NR_prctl					516
+#define __NR_arch_prctl				517
+#define __NR_adjtimex				518
 /* getrlimit (97, above) and setrlimit (160, just below) are both left at their original,
  * inert real-Linux values -- src/misc/getrlimit.c/setrlimit.c both try prlimit64 first
  * unconditionally (see that macro's own comment, further down this file) and only fall back to
@@ -659,7 +703,7 @@
  * (160) would collide with this ABI's own SYS_GETGID=160 if it ever were: a real landmine
  * avoided, not (yet) triggered, the same class of bug setgroups's own comment on this file
  * documents at length. */
-#define __NR_setrlimit				160
+#define __NR_setrlimit				519
 /* OxideBSD's own invention (490) -- see SYS_link's own comment above (near SYS_creat) for the
  * full story on why this small batch landed at 488-490. Each process now has a real, per-process
  * root directory (src/process.rs's new Process::root_inode field, mirroring Process::cwd's own
@@ -675,8 +719,8 @@
  * modules/oxfs/src/lib.rs's oxfs_sync: force-commits every currently-open write buffer to its
  * inode, the sync()-wide counterpart of fsync's single-fd version. */
 #define __NR_sync					472
-#define __NR_acct					163
-#define __NR_settimeofday			164
+#define __NR_acct					520
+#define __NR_settimeofday			521
 /* Real mount(2)'s wire format is (special, dir, fstype, flags, data) -- five conceptual args,
  * doesn't fit OxideBSD's own 4-register ABI. src/linux/mount.c is patched to dispatch to one of
  * two OxideBSD-invented syscalls, borrowing the still-real, still-distinctly-named macros
@@ -689,7 +733,7 @@
  * patched too, borrowing delete_module below the same way -- see that macro's own comment for why. */
 #define __NR_mount					165
 #define __NR_umount2				166
-#define __NR_swapon					167
+#define __NR_swapon					522
 #define __NR_swapoff				168
 /* OxideBSD's own invention (486) -- see flock's own comment (up near fsync) for why this
  * whole batch is uniformly renumbered rather than kept at each syscall's own real (here, actually
@@ -743,8 +787,8 @@
  * modules/oxfs/src/lib.rs's oxfs_umount2 in the OxideBSD tree -- flags accepted, not enforced (no
  * MNT_FORCE/MNT_DETACH). */
 #define __NR_delete_module			176
-#define __NR_get_kernel_syms		177
-#define __NR_query_module			178
+#define __NR_get_kernel_syms		523
+#define __NR_query_module			524
 #define __NR_quotactl				179
 #define __NR_nfsservctl				180
 #define __NR_getpmsg				181
