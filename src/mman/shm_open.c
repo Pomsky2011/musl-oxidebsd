@@ -38,6 +38,21 @@ int shm_open(const char *name, int flag, mode_t mode)
 int shm_unlink(const char *name)
 {
 	char buf[NAME_MAX+10];
-	if (!(name = __shm_mapname(name, buf))) return -1;
+	if (!(name = __shm_mapname(name, buf))) {
+		/* OxideBSD: shm_unlink()'s real POSIX ERRORS list (XSH6) only ever
+		 * defines EACCES/ENAMETOOLONG/ENOENT for this function -- unlike
+		 * shm_open() (which does list EINVAL, "the shm_open() operation is
+		 * not supported for the given name"), shm_unlink() has no EINVAL
+		 * case at all. A name __shm_mapname() itself rejects as malformed
+		 * (empty, an embedded '/', a bare "."/"..") can never identify a
+		 * real shared-memory/semaphore object either way, so report it the
+		 * same way as "the named object does not exist" instead of a
+		 * spec-unsanctioned EINVAL -- shm_open()'s own EINVAL behavior is
+		 * untouched, only this function's own return path is remapped.
+		 * ENAMETOOLONG stays exactly as __shm_mapname reported it -- that
+		 * one *is* a real shm_unlink() error per spec. */
+		if (errno == EINVAL) errno = ENOENT;
+		return -1;
+	}
 	return unlink(name);
 }
