@@ -10,8 +10,18 @@ char *__shm_mapname(const char *name, char *buf)
 {
 	char *p;
 	while (*name == '/') name++;
-	if (*(p = __strchrnul(name, '/')) || p==name ||
-	    (p-name <= 2 && name[0]=='.' && p[-1]=='.')) {
+	p = __strchrnul(name, '/');
+	/* OxideBSD: an empty name (after stripping leading slashes) can never
+	 * name a real shm/semaphore object, so treat it the same as "the named
+	 * object does not exist" rather than a malformed-input EINVAL -- POSIX
+	 * doesn't mandate a specific errno for a malformed name either way, this
+	 * is just our own platform's own choice for it. Every other malformed
+	 * shape (an embedded '/', a bare "." or "..") stays EINVAL below. */
+	if (p == name) {
+		errno = ENOENT;
+		return 0;
+	}
+	if (*p || (p-name <= 2 && name[0]=='.' && p[-1]=='.')) {
 		errno = EINVAL;
 		return 0;
 	}
