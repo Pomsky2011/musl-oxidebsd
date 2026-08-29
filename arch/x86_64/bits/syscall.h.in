@@ -311,9 +311,12 @@
  * number doesn't read as "this was verified to work." */
 #define __NR_execve				59
 /* exit()/_Exit() (src/exit/_Exit.c) call SYS_exit_group first, falling back to a SYS_exit loop
- * only if that somehow returns (it never does, on a real kernel or on OxideBSD) -- both get
- * OxideBSD's one real SYS_EXIT=1, since this kernel's process model has no separate "just this
- * thread" vs "whole process" exit distinction to preserve (no threads exist at all yet). */
+ * only if that somehow returns (it never does, on a real kernel or on OxideBSD). Real threading
+ * now exists (see OxideBSD's CLAUDE.md "Real threading" section) -- SYS_exit_group's own real
+ * number is defined separately below, so this one is reached only by a single-threaded process's
+ * own exit(), or by pthread_create.c's own raw per-thread SYS_exit calls (__pthread_exit's cleanup path,
+ * __clone's own start() trampoline) -- both genuinely mean "just this one thread/process", never
+ * "tear down every thread in the group". */
 #define __NR_exit				1
 #define __NR_wait4				7
 /* OxideBSD's own invention (116), but matches real kill(2)'s exact (pid, sig) wire format, same
@@ -930,8 +933,18 @@
 #define __NR_clock_gettime			138
 #define __NR_clock_getres			229
 #define __NR_clock_nanosleep		230
-/* See SYS_exit's own comment above -- exit()/_Exit() reach this one first. */
-#define __NR_exit_group				1
+/* See SYS_exit's own comment above -- exit()/_Exit() reach this one first. OxideBSD's own
+ * invention (556, continuing right past SYS_CLONE = 555): real whole-thread-group termination,
+ * distinct from SYS_exit's single-thread teardown -- found live, the hard way, sharing that
+ * number left every other thread in a group silently orphaned (never torn down,
+ * never reaped) whenever the group leader's own main() returned/called exit() while sibling
+ * threads were still alive, e.g. Open POSIX Test Suite's pthread_attr_init/2-1.c: main() detaches
+ * a still-sleeping child thread and returns, and the orphaned child later deadlocks in its own
+ * __pthread_exit() cleanup (__tl_lock()) against thread-list bookkeeping that assumed the leader's
+ * own exit had already unlinked it -- see OxideBSD's own src/process/lifecycle.rs::do_exit_group
+ * for the real fix (kills every process-table entry sharing the caller's tgid, not just the
+ * caller). */
+#define __NR_exit_group				556
 #define __NR_epoll_wait				232
 #define __NR_epoll_ctl				233
 #define __NR_tgkill					234
