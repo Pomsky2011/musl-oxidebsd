@@ -23,13 +23,32 @@ weak_alias(dummy, __aio_atfork);
  * funlockfile() again -- confirmed live via a permanent OxideBSD POSIX-pilot hang
  * (conformance/interfaces/fork/11-1.c) whose own error-reporting path deadlocked trying to
  * re-acquire stdout's lock to report the failure. Fixed by clearing every known FILE's lock in
- * the child, matching glibc's own real behavior. */
+ * the child, matching glibc's own real behavior.
+ *
+ * A second, real, independent bug found later chasing a *different* permanent hang
+ * (OxideBSD's own pthread_cond_broadcast/1-2.c pilot investigation, a real fork() from a
+ * genuinely multi-threaded process -- a process with at least one extra real pthread already
+ * running, calling real fork() to create more children): this function's own `__ofl_lock()` call
+ * just below is itself a real, non-reentrant lock acquisition -- but by the time it runs, the
+ * real, upstream fork() wrapper (src/process/fork.c) has *already* taken that exact same lock
+ * (`__stdio_ofl_lockptr`, one of its own `atfork_locks[]`) in the parent, whenever
+ * `libc.need_locks > 0` (true for any genuinely multi-threaded process), before ever calling
+ * _Fork() at all. The child inherits that lock in a real, genuinely *locked* state -- so this
+ * function's own `__ofl_lock()` call deadlocks immediately, waiting forever on a lock nothing
+ * will ever release (the only surviving thread in the child is the one stuck here; fork()'s own
+ * later child-side cleanup, which *would* reset this exact lock, never gets the chance to run
+ * first). Fixed the same way fork()'s own child-side atfork cleanup already treats every other
+ * lock in this exact situation (a raw store, not a real UNLOCK): force the lock word itself back
+ * to unlocked immediately before ever trying to acquire it, since a freshly forked child is
+ * always, unconditionally, the sole surviving thread -- any inherited "locked" state is never
+ * real contention, only ever exactly this kind of stale, inherited garbage. */
 static void reset_stdio_locks_in_child(void)
 {
 	FILE *f;
 	if ((f = __stdin_used)) { f->lock = 0; f->lockcount = 0; }
 	if ((f = __stdout_used)) { f->lock = 0; f->lockcount = 0; }
 	if ((f = __stderr_used)) { f->lock = 0; f->lockcount = 0; }
+	if (__stdio_ofl_lockptr) *__stdio_ofl_lockptr = 0;
 	for (f = *__ofl_lock(); f; f = f->next) { f->lock = 0; f->lockcount = 0; }
 	__ofl_unlock();
 }
