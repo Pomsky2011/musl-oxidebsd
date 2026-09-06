@@ -49,8 +49,16 @@ static inline void unlock_requeue(volatile int *l, volatile int *r, int w)
 {
 	a_store(l, 0);
 	if (w) __wake(l, 1, 1);
-	else __syscall(SYS_futex, l, FUTEX_REQUEUE|FUTEX_PRIVATE, 0, 1, r) != -ENOSYS
-		|| __syscall(SYS_futex, l, FUTEX_REQUEUE, 0, 1, r);
+	else {
+		/* OxideBSD patch: real FUTEX_REQUEUE doesn't fit this kernel's plain SYS_futex wire
+		 * format (real futex(2) needs 6 args for this op; this ABI's syscall entry only ever
+		 * forwards 4 real registers) -- calls a dedicated SYS_futex_requeue syscall directly
+		 * instead, with exactly the 4 real args this call site needs. No ENOSYS-fallback dance
+		 * needed: this is this kernel's own invented syscall, always registered, not a
+		 * real-kernel-version probe. See src/process/limits.rs::do_futex_requeue on the
+		 * OxideBSD side for the real handler this closes a permanent hang against. */
+		__syscall(SYS_futex_requeue, l, r, 0, 1);
+	}
 }
 
 enum {

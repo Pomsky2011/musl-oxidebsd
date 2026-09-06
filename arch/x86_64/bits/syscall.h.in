@@ -945,6 +945,18 @@
  * for the real fix (kills every process-table entry sharing the caller's tgid, not just the
  * caller). */
 #define __NR_exit_group				556
+/* OxideBSD's own invention (557, continuing right past SYS_exit_group = 556). Real Linux's
+ * FUTEX_REQUEUE/FUTEX_CMP_REQUEUE op doesn't fit this ABI's plain SYS_futex wire format -- real
+ * futex(2) needs 6 real args for this op (uaddr, op, val/nr_wake, val2/nr_requeue in the timeout
+ * slot, uaddr2, val3), but this ABI's syscall entry only ever forwards 4 real registers. This
+ * musl fork's own pthread_cond_timedwait.c's unlock_requeue -- the one real caller, reachable only
+ * from the *private*, non-pshared condvar wake path -- was patched to call this dedicated syscall
+ * directly with exactly the 4 real args it needs (uaddr, uaddr2, nr_wake, nr_requeue) instead of
+ * overloading SYS_futex. Without a real handler here, FUTEX_REQUEUE silently did nothing, hanging
+ * any contended condvar with more than one waiter queued forever (found live via
+ * pthread_cond_timedwait/2-5.c's 100-thread two-mutex handoff stress test) -- see OxideBSD's own
+ * src/process/limits.rs::do_futex_requeue for the real fix. */
+#define __NR_futex_requeue			557
 #define __NR_epoll_wait				232
 #define __NR_epoll_ctl				233
 #define __NR_tgkill					234
