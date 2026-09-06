@@ -315,6 +315,11 @@ int __pthread_create(pthread_t *restrict res, const pthread_attr_t *restrict att
 	new->map_size = size;
 	new->stack = stack;
 	new->stack_size = stack - stack_limit;
+	/* OxideBSD patch: the real, logical size the caller asked for (see struct pthread's own
+	 * requested_stack_size doc comment in pthread_impl.h) -- attr._a_stacksize is already
+	 * finalized to either the caller's own real pthread_attr_setstacksize() value or the real
+	 * implementation default by this point (the "if (!attrp || c11)" fill-in above already ran). */
+	new->requested_stack_size = attr._a_stacksize;
 	new->guard_size = guard;
 	new->self = new;
 	new->tsd = (void *)tsd;

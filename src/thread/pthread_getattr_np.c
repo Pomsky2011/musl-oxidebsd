@@ -10,7 +10,11 @@ int pthread_getattr_np(pthread_t t, pthread_attr_t *a)
 	a->_a_guardsize = t->guard_size;
 	if (t->stack) {
 		a->_a_stackaddr = (uintptr_t)t->stack;
-		a->_a_stacksize = t->stack_size;
+		/* OxideBSD patch: report the real, logical requested size, not the actual
+		 * allocator-padded extent -- see struct pthread's own requested_stack_size doc comment
+		 * in pthread_impl.h for why, and the real bug (pthread_attr_setstacksize/2-1.c) this
+		 * fixed. */
+		a->_a_stacksize = t->requested_stack_size;
 	} else {
 		char *p = (void *)libc.auxv;
 		size_t l = PAGE_SIZE;

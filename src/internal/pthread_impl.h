@@ -44,6 +44,20 @@ struct pthread {
 	void *stack;
 	size_t stack_size;
 	size_t guard_size;
+	/* OxideBSD patch: the real, logical stack size the caller asked for (via
+	 * pthread_attr_setstacksize, or the implementation default if never set) -- distinct from
+	 * stack_size above, which is the actual allocated extent after real page-rounding and
+	 * TLS/TSD overhead get folded in. pthread_getattr_np() reports this instead of stack_size so
+	 * a caller gets back exactly what it asked for (matching real glibc's own behavior), not an
+	 * allocator-padded number. Real POSIX doesn't require an exact round trip here (this is a
+	 * GNU/NPTL extension, not standard POSIX at all -- see pthread_getattr_np.c's own doc
+	 * comment) but real, unmodified glibc genuinely achieves one, confirmed live against the
+	 * host's own glibc: real Open POSIX Test Suite pthread_attr_setstacksize/2-1.c requests
+	 * PTHREAD_STACK_MIN (2048 here, not page-aligned) then checks pthread_getattr_np() reports
+	 * back that exact value -- musl's own stack_size failed this because __pthread_tsd_size
+	 * (always reserved, regardless of real per-thread TSD usage) got rounded in together with
+	 * the requested size before this field existed. */
+	size_t requested_stack_size;
 	void *result;
 	struct __ptcb *cancelbuf;
 	void **tsd;
