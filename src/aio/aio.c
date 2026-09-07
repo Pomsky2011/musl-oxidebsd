@@ -285,6 +285,24 @@ static int submit(struct aiocb *cb, int op)
 	pthread_attr_t a;
 	sigset_t allmask, origmask;
 	pthread_t td;
+
+	/* A NULL aio_buf can never be a valid transfer target for a real
+	 * LIO_READ/LIO_WRITE request, regardless of aio_nbytes (unlike plain
+	 * read(2)/write(2), where a zero-length request is permitted to
+	 * ignore the buffer argument entirely -- this queues a request, it
+	 * doesn't perform the transfer synchronously, so there's no
+	 * equivalent "nothing to touch" exemption). Checked before
+	 * __aio_get_queue() so a doomed request never allocates a queue for
+	 * a fd that might otherwise have none yet. Not checked for
+	 * aio_fsync()'s LIO_DSYNC (O_SYNC/O_DSYNC) calls, which never use
+	 * aio_buf at all.
+	 */
+	if ((op == LIO_READ || op == LIO_WRITE) && !cb->aio_buf) {
+		cb->__ret = -1;
+		cb->__err = errno = EINVAL;
+		return -1;
+	}
+
 	struct aio_queue *q = __aio_get_queue(cb->aio_fildes, 1);
 	struct aio_args args = { .cb = cb, .op = op, .q = q };
 	sem_init(&args.sem, 0, 0);
