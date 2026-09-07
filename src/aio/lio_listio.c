@@ -95,7 +95,22 @@ int lio_listio(int mode, struct aiocb *restrict const *restrict cbs, int cnt, st
 		case LIO_WRITE:
 			ret = aio_write(cbs[i]);
 			break;
+		case LIO_NOP:
+			continue;
 		default:
+			/* Real POSIX defines no aio_lio_opcode value besides
+			 * LIO_READ/LIO_WRITE/LIO_NOP -- unlike LIO_NOP (which
+			 * is legitimately skipped), a genuinely invalid value
+			 * is this request's own error, not a silent no-op.
+			 * Never actually submitted, so fill in the same
+			 * error/return state a real failed aio_read()/
+			 * aio_write() would have -- a later aio_error()/
+			 * aio_return() call, or this function's own lio_wait()
+			 * aggregation below, needs to see a real failure here,
+			 * not silently report success.
+			 */
+			cbs[i]->__ret = -1;
+			cbs[i]->__err = EINVAL;
 			continue;
 		}
 		if (ret) {
