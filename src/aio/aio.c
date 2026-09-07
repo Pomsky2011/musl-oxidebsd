@@ -286,6 +286,16 @@ static int submit(struct aiocb *cb, int op)
 	sigset_t allmask, origmask;
 	pthread_t td;
 
+	/* Marks this aiocb as genuinely having had a real aio_read()/
+	 * aio_write()/aio_fsync() call made on it -- see struct aiocb's own
+	 * __dummy4 doc comment (include/aio.h). Set unconditionally, before
+	 * any validation below, so even an immediately-rejected request
+	 * (NULL buf, bad aio_reqprio, ...) still counts as "used" -- real
+	 * POSIX aio_error()/aio_return() only reject a request that was
+	 * *never* submitted at all.
+	 */
+	cb->__dummy4[0] = 1;
+
 	/* A NULL aio_buf can never be a valid transfer target for a real
 	 * LIO_READ/LIO_WRITE request, regardless of aio_nbytes (unlike plain
 	 * read(2)/write(2), where a zero-length request is permitted to
@@ -298,6 +308,21 @@ static int submit(struct aiocb *cb, int op)
 	 * aio_buf at all.
 	 */
 	if ((op == LIO_READ || op == LIO_WRITE) && !cb->aio_buf) {
+		cb->__ret = -1;
+		cb->__err = errno = EINVAL;
+		return -1;
+	}
+
+	/* Real POSIX aio_read()/aio_write(): "shall fail if ... aio_reqprio
+	 * is not a valid value" -- this port has no real priority scheduling
+	 * for AIO worker threads (no AIO_PRIO_DELTA_MAX defined at all), but
+	 * a negative value is unconditionally invalid regardless. Checked
+	 * synchronously, before any queue/thread exists, matching real
+	 * reference implementations -- found via the Open POSIX Test
+	 * Suite's aio_read/11-2.c/aio_write/9-2.c, which require aio_read()/
+	 * aio_write() to fail immediately, not merely record an async error.
+	 */
+	if ((op == LIO_READ || op == LIO_WRITE) && cb->aio_reqprio < 0) {
 		cb->__ret = -1;
 		cb->__err = errno = EINVAL;
 		return -1;
@@ -366,12 +391,28 @@ int aio_fsync(int op, struct aiocb *cb)
 
 ssize_t aio_return(struct aiocb *cb)
 {
+	/* Real POSIX: "may be called exactly once to retrieve the return
+	 * status of a given asynchronous operation; thereafter... an error
+	 * may be returned" -- also rejects a never-submitted aiocb, same as
+	 * aio_error() below. See struct aiocb's own __dummy4 doc comment. */
+	if (!cb->__dummy4[0] || cb->__dummy4[1]) {
+		errno = EINVAL;
+		return -1;
+	}
+	cb->__dummy4[1] = 1;
 	return cb->__ret;
 }
 
 int aio_error(const struct aiocb *cb)
 {
 	a_barrier();
+	/* Real POSIX: "shall fail if... aiocbp does not refer to an
+	 * asynchronous operation whose return status has not yet been
+	 * retrieved" -- see struct aiocb's own __dummy4 doc comment. */
+	if (!cb->__dummy4[0]) {
+		errno = EINVAL;
+		return -1;
+	}
 	return cb->__err & 0x7fffffff;
 }
 

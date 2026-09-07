@@ -25,6 +25,14 @@ struct aiocb {
 	ssize_t __ret;
 	off_t aio_offset;
 	void *__next, *__prev;
+	/* Was pure unused padding; [0]/[1] now real state (oxidebsd branch):
+	 * [0] set the moment any real aio_read()/aio_write()/aio_fsync() call
+	 * is made on this aiocb (submit(), src/aio/aio.c), checked by
+	 * aio_error()/aio_return() to reject a never-submitted aiocb with
+	 * EINVAL rather than silently reading back zeroed/garbage state.
+	 * [1] set the first time aio_return() actually returns a real value
+	 * -- real POSIX permits aio_return() to be called exactly once per
+	 * completed operation; a second call fails EINVAL. */
 	char __dummy4[32-2*sizeof(void *)];
 };
 
