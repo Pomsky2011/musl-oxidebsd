@@ -27,7 +27,21 @@
 
 long sysconf(int name)
 {
-	static const short values[] = {
+	/* OxideBSD patch: widened `short` -> `int`. Real, unmodified musl upstream never needed more
+	 * than 16 bits here -- every entry it ever stored fit comfortably. This project's own
+	 * `PTHREAD_STACK_MIN` (see include/limits.h's own doc comment: bumped to 65536 so it stays a
+	 * real multiple of every page size this project's multi-arch goal targets, 4 KiB/16 KiB/64
+	 * KiB, not just this port's own 4 KiB) doesn't fit in a signed 16-bit slot at all (max
+	 * positive value 32767) -- silently truncated to `(short)65536` = `0` before this widening,
+	 * confirmed live: `sysconf(_SC_THREAD_STACK_MIN)` returned `0` instead of `65536`, found by
+	 * comparing this kernel's own POSIX conformance pilot run against a real host run before and
+	 * after the `include/limits.h` change showed zero effect. Every other entry in this table
+	 * (the `JT`/`RLIM` sentinel-encoded ones included) already fits well within `int`'s own range,
+	 * so this widening changes nothing else's runtime behavior -- confirmed by inspecting every
+	 * macro below: `JT(x)`'s and `RLIM(x)`'s own bitwise-OR results are computed in `int`
+	 * arithmetic regardless of the target array's element width, and every other real value
+	 * assigned below already sat comfortably inside a 16-bit `short`. */
+	static const int values[] = {
 		[_SC_ARG_MAX] = JT_ARG_MAX,
 		[_SC_CHILD_MAX] = RLIM(NPROC),
 		[_SC_CLK_TCK] = 100,

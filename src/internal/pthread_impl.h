@@ -53,8 +53,9 @@ struct pthread {
 	 * GNU/NPTL extension, not standard POSIX at all -- see pthread_getattr_np.c's own doc
 	 * comment) but real, unmodified glibc genuinely achieves one, confirmed live against the
 	 * host's own glibc: real Open POSIX Test Suite pthread_attr_setstacksize/2-1.c requests
-	 * PTHREAD_STACK_MIN (2048 here, not page-aligned) then checks pthread_getattr_np() reports
-	 * back that exact value -- musl's own stack_size failed this because __pthread_tsd_size
+	 * PTHREAD_STACK_MIN (64 KiB here -- see that macro's own doc comment in include/limits.h for
+	 * why, unrelated to this specific bug) then checks pthread_getattr_np() reports back that
+	 * exact value -- musl's own stack_size failed this because __pthread_tsd_size
 	 * (always reserved, regardless of real per-thread TSD usage) got rounded in together with
 	 * the requested size before this field existed. */
 	size_t requested_stack_size;

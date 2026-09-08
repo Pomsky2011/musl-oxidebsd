@@ -64,7 +64,29 @@
 /* Implementation choices... */
 
 #define PTHREAD_KEYS_MAX 128
-#define PTHREAD_STACK_MIN 2048
+/* OxideBSD patch: real, unmodified musl upstream defines this as 2048 -- not a multiple of any
+ * real page size (4 KiB on this target; 16 KiB/64 KiB on future ports this project's own
+ * multi-arch goal targets, e.g. Apple Silicon-class ARM64). The Open POSIX Test Suite's own
+ * `threads_scenarii.c` helper (shared by pthread_create/pthread_detach/pthread_exit/pthread_join)
+ * refuses to run at all -- a real, unconditional UNTESTED -- whenever
+ * `sysconf(_SC_THREAD_STACK_MIN) % sysconf(_SC_PAGESIZE) != 0`, found live by comparing this
+ * kernel's own full-corpus pilot run against the same corpus on a real glibc host (whose own
+ * page-aligned PTHREAD_STACK_MIN, 16384, never trips this): 19 real files bail out before testing
+ * anything, most of which pass cleanly on the host. 64 KiB is a multiple of every real page size
+ * this project has ever cared about (4 KiB/16 KiB/64 KiB), so this stays correct across every
+ * future architecture port, not just this one's fix. Still comfortably under
+ * `DEFAULT_STACK_SIZE` (128 KiB, src/internal/pthread_impl.h) -- a real caller's own minimum
+ * request can never exceed the implementation's own unrequested default. **Also required a real
+ * companion fix**: `src/conf/sysconf.c`'s own `values[]` table (real, previously-unpatched musl
+ * core, not just this arch's own patch surface) stored every `_SC_*` entry as a 16-bit `short` --
+ * 65536 silently truncates to `0` in one, confirmed live the hard way (this exact value change,
+ * on its own, measured zero effect on a real full-corpus pilot re-run). See that file's own doc
+ * comment for the widening this needed. Confirmed via an isolated A/B canary run that the real,
+ * pre-existing `pthread_cond_broadcast/{1-2,2-3,4-2}.c` TIMEOUTs (a 10,000-real-thread stress
+ * test, `MAX_THREAD_CHILDREN`) are unaffected by this value either way -- all three time out
+ * identically at `2048` and at `65536`, so this bump isn't the cause of that pre-existing,
+ * already-documented, bounded characteristic. */
+#define PTHREAD_STACK_MIN 65536
 #define PTHREAD_DESTRUCTOR_ITERATIONS 4
 #define SEM_VALUE_MAX 0x7fffffff
 #define SEM_NSEMS_MAX 256
