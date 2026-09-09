@@ -955,8 +955,24 @@
  * overloading SYS_futex. Without a real handler here, FUTEX_REQUEUE silently did nothing, hanging
  * any contended condvar with more than one waiter queued forever (found live via
  * pthread_cond_timedwait/2-5.c's 100-thread two-mutex handoff stress test) -- see OxideBSD's own
- * src/process/limits.rs::do_futex_requeue for the real fix. */
-#define __NR_futex_requeue			557
+ * src/process/limits.rs::do_futex_requeue for the real fix.
+ *
+ * **Named oxidebsd_futex_requeue, not plain futex_requeue** -- a real name collision, found live:
+ * this same vendored header mirrors real Linux's own modern futex2 family further down (a
+ * genuinely different, unrelated syscall -- real struct-based futex_waitv/wake/wait/requeue, not
+ * this ABI's own 4-arg format) at its own real number 456, under the identical macro name
+ * "futex_requeue". The number itself (557) was correctly chosen collision-free per this file's own
+ * numbering rule, but choosing an already-used *name* meant a plain C #define redefinition -- the
+ * textually-later plain "futex_requeue" (456) silently won, so unlock_requeue's own SYS_futex_requeue
+ * call actually issued syscall 456, not 557 -- a real, silent 100%-failure regression: musl never
+ * saw an error (the call is fire-and-forget), so every private-condvar chain-wake beyond the first
+ * directly-woken waiter permanently never fired. Confirmed via `[boot] unrecognized syscall number
+ * 456` in real kernel boot output and a temporary futex-call trace showing zero real requeue calls
+ * ever reaching OxideBSD's own do_futex_requeue, for any test in the whole POSIX pilot corpus.
+ * Lesson for any future invented syscall name: this file's collision-free *number* range (471+)
+ * says nothing about name collisions with a real, unrelated syscall of the same name mirrored
+ * elsewhere in this same vendored header -- check both. */
+#define __NR_oxidebsd_futex_requeue		557
 #define __NR_epoll_wait				232
 #define __NR_epoll_ctl				233
 #define __NR_tgkill					234
