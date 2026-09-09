@@ -320,6 +320,11 @@ int __pthread_create(pthread_t *restrict res, const pthread_attr_t *restrict att
 	 * finalized to either the caller's own real pthread_attr_setstacksize() value or the real
 	 * implementation default by this point (the "if (!attrp || c11)" fill-in above already ran). */
 	new->requested_stack_size = attr._a_stacksize;
+	/* OxideBSD patch: see struct pthread's own requested_stack_addr doc comment in
+	 * pthread_impl.h. attr._a_stackaddr is the caller's original, untouched top-of-stack value
+	 * (0 if pthread_attr_setstack() was never called) -- captured here, before `stack` above
+	 * potentially gets lowered by the real TLS-carve-out logic a few lines up. */
+	new->requested_stack_addr = attr._a_stackaddr;
 	new->guard_size = guard;
 	new->self = new;
 	new->tsd = (void *)tsd;

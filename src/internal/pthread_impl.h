@@ -59,6 +59,23 @@ struct pthread {
 	 * (always reserved, regardless of real per-thread TSD usage) got rounded in together with
 	 * the requested size before this field existed. */
 	size_t requested_stack_size;
+	/* OxideBSD patch: the exact, untouched top-of-stack address the caller passed to
+	 * pthread_attr_setstack() (attr._a_stackaddr verbatim), or 0 if the caller never provided
+	 * an explicit stack. Distinct from `stack` above: when a caller-supplied stack is small
+	 * enough to also hold this thread's own TLS/TSD data, pthread_create() carves that space
+	 * directly out of the *top* of the caller's stack and lowers `stack` by that amount --
+	 * real, intentional musl behavior (avoids a second mmap for a small enough caller stack),
+	 * but it means `stack` no longer equals what the caller originally passed in.
+	 * pthread_getattr_np() reports this field instead whenever it's set, so a caller gets back
+	 * exactly the address it originally asked for (matching real glibc's own behavior -- same
+	 * "GNU/NPTL extension, not standard POSIX, but real glibc achieves an exact round trip"
+	 * reasoning requested_stack_size's own doc comment above already gives). Confirmed live
+	 * against the host's own glibc: the Open POSIX Test Suite's pthread_attr_setstack/2-1.c
+	 * requests PTHREAD_STACK_MIN and checks pthread_getattr_np() reports back the exact
+	 * pthread_attr_setstack()-supplied address -- musl's own `stack` failed this whenever the
+	 * TLS-carve-out path was taken, silently shifting the reported address down by
+	 * (__pthread_tsd_size + libc.tls_size) bytes before this field existed. */
+	size_t requested_stack_addr;
 	void *result;
 	struct __ptcb *cancelbuf;
 	void **tsd;

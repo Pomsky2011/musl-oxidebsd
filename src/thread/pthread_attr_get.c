@@ -37,10 +37,19 @@ int pthread_attr_getscope(const pthread_attr_t *restrict a, int *restrict scope)
 
 int pthread_attr_getstack(const pthread_attr_t *restrict a, void **restrict addr, size_t *restrict size)
 {
-	if (!a->_a_stackaddr)
-		return EINVAL;
+	/* Real bug, not intentional: a fresh, never-pthread_attr_setstack()'d attr has
+	 * _a_stackaddr==0 (its own real sentinel for "let pthread_create() choose the stack
+	 * itself"), which used to unconditionally EINVAL here -- but POSIX documents no error
+	 * conditions at all for this function, and real glibc succeeds unconditionally, reporting
+	 * a NULL address (confirmed live: freshly pthread_attr_init()'d attr, glibc's own
+	 * pthread_attr_getstack() returns 0 with addr=NULL). Found via the Open POSIX Test Suite's
+	 * pthread_attr_setstack/{1,2,4,6,7}-1.c, every one of which calls this immediately after
+	 * pthread_attr_init() (before ever calling pthread_attr_setstack()) purely to read back
+	 * the attr's own current/default values -- the EINVAL here made all five fail before
+	 * reaching any of their own real test logic, kernel-independent (no thread has been
+	 * created yet at this point in any of them). */
 	*size = a->_a_stacksize;
-	*addr = (void *)(a->_a_stackaddr - *size);
+	*addr = a->_a_stackaddr ? (void *)(a->_a_stackaddr - *size) : 0;
 	return 0;
 }
 

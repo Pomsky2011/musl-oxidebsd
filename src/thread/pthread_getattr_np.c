@@ -9,7 +9,13 @@ int pthread_getattr_np(pthread_t t, pthread_attr_t *a)
 	a->_a_detach = t->detach_state>=DT_DETACHED;
 	a->_a_guardsize = t->guard_size;
 	if (t->stack) {
-		a->_a_stackaddr = (uintptr_t)t->stack;
+		/* OxideBSD patch: report the caller's own original pthread_attr_setstack() address
+		 * when there was one, not t->stack -- see struct pthread's own requested_stack_addr
+		 * doc comment in pthread_impl.h for why they can differ, and the real bug
+		 * (pthread_attr_setstack/2-1.c) this fixed. */
+		a->_a_stackaddr = t->requested_stack_addr
+			? t->requested_stack_addr
+			: (uintptr_t)t->stack;
 		/* OxideBSD patch: report the real, logical requested size, not the actual
 		 * allocator-padded extent -- see struct pthread's own requested_stack_size doc comment
 		 * in pthread_impl.h for why, and the real bug (pthread_attr_setstacksize/2-1.c) this
